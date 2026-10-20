@@ -1,0 +1,18 @@
+# Core dependencies (pinned for reproducible research builds)
+# Install project deps with: pip install -e ".[dev]"
+# This file exists for pip-only / container workflows.
+numpy>=1.26
+torch>=2.1
+opencv-python>=4.8
+tqdm>=4.66
+pyyaml>=6.0
+
+# Vector search (choose one or more)
+faiss-cpu>=1.8
+# qdrant-client>=1.9
+# pymilvus>=2.3
+
+# Dev
+pytest>=8.0
+ruff>=0.5
+black>=24.0

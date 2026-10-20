@@ -1,0 +1,51 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+.python-version
+
+# Data & artifacts (never commit biometric data or vectors)
+data/
+*.npy
+*.npz
+*.bin
+*.faiss
+*.index
+*.onnx
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.parquet
+*.h5
+embeddings/
+exports/
+
+# Demo outputs
+artifacts/
+runs/
+outputs/
+*.mp4
+*.avi
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Notebooks
+.ipynb_checkpoints/
+
+# Logs / caches
+*.log
+.cache/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/

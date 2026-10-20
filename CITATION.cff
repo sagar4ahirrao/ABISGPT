@@ -1,0 +1,33 @@
+cff-version: 1.2.0
+title: "OpenABIS: Multi-Modal ABIS & Passive PAD with Transformers, VLMs and Vector Search"
+message: >-
+  If you use this software or white paper, please cite it
+  using the metadata below.
+type: software
+authors:
+  - name: OpenABIS Contributors
+version: 0.1.0
+date-released: "2026-10-20"
+license: MIT
+repository-code: "https://github.com/YOUR_ORG/OpenABIS"
+keywords:
+  - biometrics
+  - ABIS
+  - presentation-attack-detection
+  - liveness
+  - vision-transformer
+  - vision-language-model
+  - rPPG
+  - vector-search
+  - HNSW
+  - product-quantization
+abstract: >-
+  Reference implementation and technical white paper for a
+  next-generation multi-modal Automated Biometric Identification
+  System (ABIS) with fully passive Presentation Attack Detection
+  (PAD). Combines Vision Transformer (ViT) biometric encoders,
+  Vision-Language Model (VLM) semantic liveness guardrails,
+  temporal rPPG deepfake rejection, flash-induced surface diffusion
+  analysis, and two-tier vector retrieval (IVF-HNSW + Product
+  Quantization triage with classical geometric precision
+  verification).

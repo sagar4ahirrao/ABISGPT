@@ -1,0 +1,31 @@
+# OpenABIS reference configuration
+# Copy to configs/local.yaml for your deployment and edit freely.
+
+openabis:
+  index:
+    backend: faiss          # faiss | qdrant | milvus | brute
+    dim: 512                # L2-normalized embedding dim (white paper §3.2)
+    nlist: 256              # IVF coarse cells
+    nprobe: 16
+    m: 32                   # HNSW edges/node (white paper range 16–32)
+    ef_search: 128          # probe list size (white paper range 64–256)
+    ef_construction: 200
+    pq_segments: 64         # 512/64 = 8 floats per segment
+    pq_bits: 8              # 8 bits → 256 centroids per segment (64 bytes total)
+    metric: cosine
+    uri: "http://localhost:19530"
+
+  pad:
+    vlm_weight: 0.4
+    rppg_weight: 0.4
+    flash_weight: 0.2
+    gate_threshold: 0.6     # fused score >= threshold => live
+    fps: 60
+    rppg_window_sec: 4.0
+    deepfake_band: [0.7, 4.0]   # plausible heart-rate band (Hz)
+
+  pipeline:
+    top_k: 10               # Tier-1 candidate count (white paper §1.3)
+    match_threshold: 0.72   # Tier-2 cosine threshold for "match" verdict
+    batch_size: 32
+    device: auto
