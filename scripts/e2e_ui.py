@@ -7,6 +7,7 @@ every action. Console errors and page exceptions are captured as evidence.
 
 from __future__ import annotations
 
+import subprocess
 import sys
 from pathlib import Path
 
@@ -18,6 +19,30 @@ sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 BASE = "http://localhost:8000"
 SHOTDIR = Path("artifacts/ui_shots")
+OLIVETTI = Path("artifacts/dataset/olivetti.npz")
+
+
+def ensure_dataset() -> None:
+    """Fresh-clone bootstrap: fetch the Olivetti npz once if missing."""
+    if OLIVETTI.exists():
+        return
+    print("(one-time: fetching Olivetti via scripts/prepare_dataset.py …)")
+    subprocess.run(
+        [sys.executable, "scripts/prepare_dataset.py", "--dataset",
+         "olivetti", "--out", str(OLIVETTI)], check=True)
+
+
+def ensure_service() -> None:
+    """Clear failure mode when the docker API isn't running."""
+    import requests
+
+    try:
+        requests.get(f"{BASE}/health", timeout=5)
+    except Exception as exc:  # noqa: BLE001
+        raise SystemExit(
+            f"no live API at {BASE} ({exc}) — start it with:\n"
+            "  docker compose up -d --build\n"
+            "then re-run this script.") from None
 
 
 def make_face_jpg(path: Path, subject: int = 0) -> None:
@@ -31,6 +56,8 @@ def make_face_jpg(path: Path, subject: int = 0) -> None:
 
 
 def main() -> int:
+    ensure_dataset()
+    ensure_service()
     SHOTDIR.mkdir(parents=True, exist_ok=True)
     face = Path("artifacts/ui_face_a.jpg").resolve()
     make_face_jpg(face, subject=0)

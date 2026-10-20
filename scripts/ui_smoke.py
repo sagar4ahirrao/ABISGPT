@@ -11,6 +11,8 @@ Replicates exactly what the browser does per UI action with a real face
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from pathlib import Path
 
 import cv2
@@ -18,6 +20,23 @@ import numpy as np
 import requests
 
 BASE = "http://localhost:8000"
+OLIVETTI = Path("artifacts/dataset/olivetti.npz")
+
+
+def ensure_bootstrap() -> None:
+    """Fresh-clone: fetch the Olivetti npz once; require the live docker API."""
+    if not OLIVETTI.exists():
+        print("(one-time: fetching Olivetti via scripts/prepare_dataset.py …)")
+        subprocess.run(
+            [sys.executable, "scripts/prepare_dataset.py", "--dataset",
+             "olivetti", "--out", str(OLIVETTI)], check=True)
+    try:
+        requests.get(f"{BASE}/health", timeout=5)
+    except Exception as exc:  # noqa: BLE001
+        raise SystemExit(
+            f"no live API at {BASE} ({exc}) — start it with:\n"
+            "  docker compose up -d --build\n"
+            "then re-run this script.") from None
 
 
 def frames_of(img32: np.ndarray, n: int) -> list:
@@ -27,6 +46,7 @@ def frames_of(img32: np.ndarray, n: int) -> list:
 
 
 def main() -> int:
+    ensure_bootstrap()
     failures: list[str] = []
 
     def check(name: str, cond: bool, detail: object = "") -> None:
