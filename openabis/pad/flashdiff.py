@@ -21,8 +21,8 @@ differential map; this classical tier yields a stable baseline for a fused
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import asdict, dataclass
-from typing import Sequence
 
 import cv2
 import numpy as np

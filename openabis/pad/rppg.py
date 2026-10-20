@@ -17,8 +17,8 @@ liveness signal *gate*, not a clinical pulse oximeter.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import List, Sequence
 
 import cv2
 import numpy as np
@@ -159,7 +159,7 @@ class RppgAnalyzer:
 
     def from_video_path(self, path: str, max_frames: int = 512) -> RppgResult:
         """Read an MP4/AVI file then run `from_frames` (offline evaluation)."""
-        frames: List[np.ndarray] = []
+        frames: list[np.ndarray] = []
         cap = cv2.VideoCapture(path)
         try:
             fps = cap.get(cv2.CAP_PROP_FPS) or self.fps

@@ -2,12 +2,20 @@
 
 from __future__ import annotations
 
-from typing import Iterable, Sequence
+import uuid
+from collections.abc import Iterable, Sequence
 
 import numpy as np
 
 from openabis.config import IndexConfig
 from openabis.index.base import VectorIndex
+
+# Deterministic namespace: string identity ids -> stable UUID point ids.
+_NS = uuid.UUID("3af1c2ab-07b0-4d3e-916a-2fcb1b5a9d55")
+
+
+def _point_uuid(identity_id: str) -> str:
+    return str(uuid.uuid5(_NS, identity_id))
 
 
 def _ensure_qdrant():
@@ -56,10 +64,11 @@ class QdrantIndex(VectorIndex):
                 ),
                 # Product quantization: 512 floats -> 64 bytes (white paper §4.1)
                 quantization_config=models.ProductQuantization(
-                    compression=(models.CompressionRatio.X16
-                                 if self.config.pq_segments == 64 and self.config.pq_bits == 8
-                                 else models.CompressionRatio.X4),
-                    always_ram=False,
+                    product=models.ProductQuantizationConfig(
+                        compression=(models.CompressionRatio.X16
+                                     if self.config.pq_segments == 64 and self.config.pq_bits == 8
+                                     else models.CompressionRatio.X4),
+                    ),
                 ),
             )
 
@@ -70,8 +79,12 @@ class QdrantIndex(VectorIndex):
         if x.ndim == 1:
             x = x[None, :]
         points = [
-            models.PointStruct(id=uid, vector=vec.astype(float).tolist(), payload={})
-            for uid, vec in zip(ids, x)
+            models.PointStruct(
+                id=_point_uuid(identity),
+                vector=vec.astype(float).tolist(),
+                payload={"identity_id": identity},
+            )
+            for identity, vec in zip(ids, x, strict=False)
         ]
         # Upload in chunks to respect gRPC message limits
         for start in range(0, len(points), 256):
@@ -84,25 +97,50 @@ class QdrantIndex(VectorIndex):
     def search(self, query: np.ndarray, top_k: int = 10) -> list[tuple[str, float]]:
         models = self._models
         vec = np.asarray(query, dtype=np.float32).reshape(-1).tolist()
-        res = self._client.search(
+        if hasattr(self._client, "query_points"):      # qdrant-client >= 1.10
+            res = self._client.query_points(
+                collection_name=self.collection,
+                query=vec,
+                limit=top_k,
+                search_params=models.SearchParams(hnsw_ef=self.config.ef_search),
+                with_payload=True,
+            ).points
+        else:                                          # qdrant-client 1.9
+            res = self._client.search(
+                collection_name=self.collection,
+                query_vector=vec,
+                limit=top_k,
+                search_params=models.SearchParams(hnsw_ef=self.config.ef_search),
+                with_payload=True,
+            )
+        return [(str(hit.payload.get("identity_id", hit.id)), float(hit.score))
+                for hit in res]
+
+    def _count_matching(self, identity_ids: list[str]) -> int:
+        models = self._models
+        return int(self._client.count(
             collection_name=self.collection,
-            query_vector=vec,
-            limit=top_k,
-            search_params=models.SearchParams(hnsw_ef=self.config.ef_search),
-            with_payload=False,
-        )
-        return [(str(hit.id), float(hit.score)) for hit in res]
+            count_filter=models.Filter(
+                must=[models.FieldCondition(
+                    key="identity_id",
+                    match=models.MatchAny(any=identity_ids),
+                )],
+            ),
+        ).count)
 
     def remove(self, ids: Iterable[str]) -> int:
-        wanted = list(set(ids))
+        wanted = sorted(set(str(i) for i in ids))
         if not wanted:
             return 0
-        res = self._client.delete(
+        before = self._count_matching(wanted)
+        self._client.delete(
             collection_name=self.collection,
-            points_selector=self._models.PointIdsList(points=wanted),
+            points_selector=self._models.PointIdsList(
+                points=[_point_uuid(i) for i in wanted],
+            ),
             wait=True,
         )
-        return int(getattr(res, "operation_count", len(wanted)) or 0)
+        return before - self._count_matching(wanted)
 
     def __len__(self) -> int:
         info = self._client.get_collection(self.collection)

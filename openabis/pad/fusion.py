@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable, Sequence
 from dataclasses import asdict, dataclass
-from typing import Callable, Dict, List, Sequence
 
 import numpy as np
 
@@ -14,8 +14,8 @@ from openabis.config import PadConfig
 class PadVerdict:
     is_live: bool
     fused_score: float
-    tier_scores: Dict[str, float]
-    reasons: List[str]
+    tier_scores: dict[str, float]
+    reasons: list[str]
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -40,8 +40,8 @@ class PassivePadEngine:
     # ------------------------------------------------------------------ #
     def evaluate(self, frames: Sequence[np.ndarray]) -> PadVerdict:
         """Fuse `rPPG + flash (+ optional VLM)` over incoming frames."""
-        reasons: List[str] = []
-        tier_scores: Dict[str, float] = {}
+        reasons: list[str] = []
+        tier_scores: dict[str, float] = {}
 
         # ---- Tier 1: rPPG ------------------------------------------------ #
         from openabis.pad.rppg import RppgAnalyzer
@@ -96,7 +96,7 @@ class PassivePadEngine:
 
     __call__ = evaluate
 
-    def _weighted_fusion(self, scores: Dict[str, float]) -> float:
+    def _weighted_fusion(self, scores: dict[str, float]) -> float:
         available = {k: v for k, v in scores.items() if v is not None}
         weight_map = {
             "vlm": self.cfg.vlm_weight,

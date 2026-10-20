@@ -14,15 +14,14 @@ import secrets
 import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List
-
+from typing import Any
 
 
 @dataclass
 class VaultEntry:
     vector_uuid: str
-    pii_refs: List[str]              # hashed references — no raw PII at rest
-    metadata: Dict[str, Any]
+    pii_refs: list[str]              # hashed references — no raw PII at rest
+    metadata: dict[str, Any]
 
 
 class VectorVault:
@@ -60,7 +59,7 @@ class VectorVault:
         salt = secrets.token_bytes(4)
         return salt.hex() + hashlib.sha256(salt + raw.encode("utf-8")).hexdigest()[:40]
 
-    def link(self, vector_uuid: str, pii: Dict[str, str], metadata: Dict[str, Any] | None = None) -> bool:
+    def link(self, vector_uuid: str, pii: dict[str, str], metadata: dict[str, Any] | None = None) -> bool:
         """Associate a vector UUID with hashed PII references."""
         cur = self._conn.cursor()
         refs = [self.hash_ref(f"{k}={v}") for k, v in sorted(pii.items())]

@@ -10,8 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from openabis.config import IndexConfig
 from openabis.encoder import ViTBiometricEncoder
-from openabis.index.factory import build_backend, BruteForceIndex
-
+from openabis.index.factory import BruteForceIndex, build_backend
 
 DIM = 512
 

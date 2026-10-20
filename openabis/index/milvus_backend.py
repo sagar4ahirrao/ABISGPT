@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Iterable, Sequence
+from collections.abc import Iterable, Sequence
 
 import numpy as np
 
@@ -77,7 +77,7 @@ class MilvusIndex(VectorIndex):
 
     def add(self, ids: Sequence[str], embeddings: np.ndarray) -> None:
         rows = [
-            (uid, vec.astype(float).tolist()) for uid, vec in zip(ids, np.asarray(embeddings))
+            (uid, vec.astype(float).tolist()) for uid, vec in zip(ids, np.asarray(embeddings), strict=False)
         ]
         self.collection.insert(rows)
         self.collection.flush()

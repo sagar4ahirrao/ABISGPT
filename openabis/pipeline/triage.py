@@ -13,8 +13,8 @@ The PAD gate (white paper §2) runs *before* search — fail-closed.
 from __future__ import annotations
 
 import time
+from collections.abc import Sequence
 from dataclasses import asdict, dataclass, field
-from typing import Dict, List, Sequence
 
 import numpy as np
 
@@ -37,8 +37,8 @@ class IdentificationResult:
     query_id: str
     decision: str                     # "match" | "no_match" | "rejected"
     pad_live: bool | None
-    pad_scores: Dict[str, float] = field(default_factory=dict)
-    candidates: List[Tier1Candidate] = field(default_factory=list)
+    pad_scores: dict[str, float] = field(default_factory=dict)
+    candidates: list[Tier1Candidate] = field(default_factory=list)
     elapsed_ms: float = 0.0
     tier1_hit_ms: float = 0.0
     tier2_rerank_ms: float = 0.0
@@ -65,7 +65,7 @@ class PrecisionVerifier:
     roll-off in production deployments (white paper §1.3).
     """
 
-    def __init__(self, gallery: Dict[str, np.ndarray]):
+    def __init__(self, gallery: dict[str, np.ndarray]):
         self.gallery = gallery
 
     def score(self, query: np.ndarray, identity_id: str) -> float:
@@ -91,7 +91,7 @@ class TwoTierPipeline:
         self.encoder = encoder or ViTBiometricEncoder(strategy="hash")
         self.pad = pad or PassivePadEngine(self.config.pad)
         self.index = index_backend or build_backend(self.config.index)
-        self._gallery: Dict[str, np.ndarray] = {}
+        self._gallery: dict[str, np.ndarray] = {}
         self.verifier = PrecisionVerifier(self._gallery)
 
     # ------------------------------------------------------------------ #

@@ -70,7 +70,7 @@ def main() -> int:
     latencies: list[float] = []
     id_recall: list[float] = []
     slot_recall: list[float] = []
-    for q in range(args.queries_per_id):
+    for _q in range(args.queries_per_id):
         sample = int(rng.integers(0, len(vecs)))
         query = vecs[sample] + 0.05 * rng.normal(0, 1, cfg.dim).astype(np.float32)
         query /= np.linalg.norm(query)

@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Literal
+from typing import Any, Literal
 
 import yaml
 
@@ -73,7 +73,7 @@ class OpenAbisConfig:
     pipeline: PipelineConfig = field(default_factory=PipelineConfig)
 
     @classmethod
-    def from_yaml(cls, path: str | os.PathLike) -> "OpenAbisConfig":
+    def from_yaml(cls, path: str | os.PathLike) -> OpenAbisConfig:
         """Load a YAML tree where keys mirror the dataclass field names."""
         raw = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
         root = raw.get("openabis", raw)
@@ -90,7 +90,7 @@ class OpenAbisConfig:
         cfg.index.validate()
         return cfg
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         from dataclasses import asdict
 
         return asdict(self)

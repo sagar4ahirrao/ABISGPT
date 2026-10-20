@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from openabis.config import IndexConfig, IndexBackend
+from openabis.config import IndexBackend, IndexConfig
 from openabis.index.base import VectorIndex
 
 

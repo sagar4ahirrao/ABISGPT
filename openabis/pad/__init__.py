@@ -1,6 +1,6 @@
 """Passive Presentation Attack Detection (white paper §2)."""
 
-from openabis.pad.fusion import PassivePadEngine, PadVerdict
+from openabis.pad.fusion import PadVerdict, PassivePadEngine
 
 __all__ = ["PassivePadEngine", "PadVerdict", "RppgAnalyzer", "FlashDiffusionAnalyzer"]
 

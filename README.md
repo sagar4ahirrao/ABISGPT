@@ -85,6 +85,36 @@ You should see a retrieval report with recall@k, spoof rejection, and
 latency percentiles. No GPU, no camera, no real biometric data required — the
 demo fabricates deterministic synthetic embeddings and frames.
 
+### Docker: Qdrant + HTTP API
+
+```bash
+docker compose up -d --build      # qdrant + torch-free FastAPI image
+python scripts/api_smoke.py http://localhost:8000
+```
+
+`scripts/api_smoke.py` enrolls pulse-carrying synthetic captures via
+`POST /enroll`, verifies `POST /identify` returns `match` behind the
+fail-closed rPPG/flash/VLM PAD gate, exercises `POST /pad` on a flat replay
+attempt, and checks the GDPR erasure hook (`DELETE /identities/{id}` → 404
+once removed). Run the live Qdrant integration tests against the container
+with:
+
+```bash
+docker compose up -d qdrant
+OPENABIS_RUN_INTEGRATION=1 OPENABIS_QDRANT_URI=http://localhost:6333 pytest tests/test_qdrant_integration.py
+```
+
+### Train the reference encoder
+
+```bash
+python scripts/train_encoder.py --identities 64 --epochs 4
+```
+
+Trains a compact ArcFace-head embedding network on procedural synthetic
+identities (CPU, ~25 s), reports **unseen-identity recall@1** on held-out
+identities, and writes `artifacts/toy_encoder.pt`. The synthetic-task metrics
+validate training mechanics; they are not a biometric-quality benchmark.
+
 ### Optional backends
 
 ```bash
@@ -122,11 +152,17 @@ OpenABIS/
 |   |   +-- vit_encoder.py
 |   |-- pad/                    # passive presentation attack detection
 |   |   |-- __init__.py
-|   |   |-- rppg.py             # temporal rPPG transformer
-|   |   +-- flashdiff.py        # flash diffusion analysis
+|   |   |-- rppg.py             # temporal rPPG (FFT/SNR classical tier)
+|   |   |-- flashdiff.py        # flash surface-diffusion tier
+|   |   +-- vlm.py              # CLIP zero-shot + heuristic guardrails
 |   |-- index/                  # vector search backends
 |   |   |-- __init__.py
-|   |   +-- faiss_backend.py    # fan-out to other backends
+|   |   |-- faiss_backend.py    # IVF-HNSW-PQ
+|   |   |-- qdrant_backend.py   # remote HNSW + server-side PQ
+|   |   +-- milvus_backend.py
+|   |-- api/                    # FastAPI service (Docker reference)
+|   |   +-- service.py
+|   |-- training/               # toy biometric encoder (ArcFace, CPU)
 |   |-- pipeline/               # two-tier triage orchestration
 |   |   |-- __init__.py
 |   |   +-- triage.py

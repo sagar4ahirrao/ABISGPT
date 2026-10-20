@@ -1,0 +1,15 @@
+# Keep the API image svelte.
+.git
+.venv
+venv
+__pycache__
+*.pyc
+.pytest_cache
+.ruff_cache
+artifacts
+tests
+docs
+scripts
+.github
+*.md
+!README.md

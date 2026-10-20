@@ -64,7 +64,6 @@ def run(identities: int, queries_per_id: int, top_k: int, seed: int) -> int:
     cfg = OpenAbisConfig()
     cfg.index.backend = "brute"
     pipe = TwoTierPipeline(encoder=ViTBiometricEncoder(strategy="hash"), pad=PassivePadEngine(cfg.pad), config=cfg)
-    rng = np.random.default_rng(seed)
 
     print(f"[note] Enrolling {identities} synthetic identities...")
     for i in range(identities):

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Iterable, Sequence
+from collections.abc import Iterable, Sequence
 
 import numpy as np
 
@@ -99,7 +99,7 @@ class FaissIndex(VectorIndex):
         self._coarse.hnsw.efSearch = self.config.ef_search  # live re-tune support
         sims, idx = self._index.search(q, top_k)
         hits: list[tuple[str, float]] = []
-        for pos, sim in zip(idx[0], sims[0]):
+        for pos, sim in zip(idx[0], sims[0], strict=False):
             pos = int(pos)
             if pos < 0 or pos >= len(self._ids):
                 continue

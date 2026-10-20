@@ -13,7 +13,6 @@ Produces 512-D L2-normalized embeddings for face samples
 from __future__ import annotations
 
 import hashlib
-from typing import List
 
 import numpy as np
 
@@ -52,7 +51,7 @@ class ViTBiometricEncoder:
             img = np.stack([img] * 3, axis=-1)
         return img.astype(np.float32) / 255.0
 
-    def encode(self, images: List[np.ndarray]) -> np.ndarray:
+    def encode(self, images: list[np.ndarray]) -> np.ndarray:
         """Encode a batch of frames into L2-normalized 512-D vectors."""
         if self.strategy == "torch":
             return self._encode_torch(images)
@@ -67,7 +66,7 @@ class ViTBiometricEncoder:
     # ------------------------------------------------------------------ #
     # Strategy: deterministic hash (tests / synthetic baselines)
     # ------------------------------------------------------------------ #
-    def _encode_hash(self, images: List[np.ndarray]) -> np.ndarray:
+    def _encode_hash(self, images: list[np.ndarray]) -> np.ndarray:
         vectors = np.zeros((len(images), self.dim), dtype=np.float32)
         for i, image in enumerate(images):
             digest = hashlib.sha256(np.ascontiguousarray(image).tobytes()).digest()
@@ -79,7 +78,7 @@ class ViTBiometricEncoder:
     # ------------------------------------------------------------------ #
     # Strategy: real transformer backbone (timm) — torch imported lazily
     # ------------------------------------------------------------------ #
-    def _encode_torch(self, images: List[np.ndarray]) -> np.ndarray:
+    def _encode_torch(self, images: list[np.ndarray]) -> np.ndarray:
         try:
             import torch
             import torch.nn.functional as F
