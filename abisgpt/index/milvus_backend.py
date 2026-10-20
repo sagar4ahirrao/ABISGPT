@@ -59,8 +59,8 @@ class MilvusIndex(VectorIndex):
             return
         schema = self._CollectionSchema(
             fields=[
-                FS("id", DT.VarChar, max_length=64, is_primary=True),
-                FS("embedding", DT.FloatVector, dim=self.config.dim),
+                FS("id", DT.VARCHAR, max_length=64, is_primary=True),
+                FS("embedding", DT.FLOAT_VECTOR, dim=self.config.dim),
             ],
             description="ABISGPT Tier-1 vector triage registry",
         )
