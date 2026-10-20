@@ -29,11 +29,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev,faiss]"
       - name: Lint (ruff)
-        run: ruff check openabis scripts tests
+        run: ruff check abisgpt scripts tests
       - name: Tests
         env:
           KMP_DUPLICATE_LIB_OK: "TRUE"   # torch+faiss Windows DLL clash
-        run: pytest -q --cov=openabis --cov-report=term-missing
+        run: pytest -q --cov=abisgpt --cov-report=term-missing
 
   typecheck:
     runs-on: ubuntu-latest
@@ -44,7 +44,7 @@ jobs:
           python-version: "3.10"
       - run: |
           pip install -e ".[dev]" mypy
-          mypy openabis --ignore-missing-imports
+          mypy abisgpt --ignore-missing-imports
       continue-on-error: true     # loosen once typing coverage grows
 
   docs:
@@ -59,3 +59,4 @@ jobs:
           test -f docs/RESPONSIBLE-USE.md
           test -f docs/BENCHMARKS.md
           test -f CITATION.cff
+

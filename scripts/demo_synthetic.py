@@ -18,10 +18,10 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from openabis.config import OpenAbisConfig
-from openabis.encoder import ViTBiometricEncoder
-from openabis.pad import PassivePadEngine
-from openabis.pipeline import TwoTierPipeline
+from abisgpt.config import AbisGptConfig
+from abisgpt.encoder import ViTBiometricEncoder
+from abisgpt.pad import PassivePadEngine
+from abisgpt.pipeline import TwoTierPipeline
 
 
 def synthetic_frames(seed: int, count: int = 240, fps: float = 60.0) -> list[np.ndarray]:
@@ -61,7 +61,7 @@ def run(identities: int, queries_per_id: int, top_k: int, seed: int) -> int:
     # Tiny galleries cannot train IVF-HNSW-PQ clustering — use the exact
     # brute-force oracle; the FAISS backend kicks in via scripts/evaluate.py
     # on registry-scale galleries.
-    cfg = OpenAbisConfig()
+    cfg = AbisGptConfig()
     cfg.index.backend = "brute"
     pipe = TwoTierPipeline(encoder=ViTBiometricEncoder(strategy="hash"), pad=PassivePadEngine(cfg.pad), config=cfg)
 
@@ -102,7 +102,7 @@ def run(identities: int, queries_per_id: int, top_k: int, seed: int) -> int:
 
 
 def main() -> int:  # pragma: no cover — CLI entry
-    ap = argparse.ArgumentParser(description="OpenABIS end-to-end synthetic demo")
+    ap = argparse.ArgumentParser(description="ABISGPT end-to-end synthetic demo")
     ap.add_argument("--identities", type=int, default=20)
     ap.add_argument("--queries-per-id", type=int, default=2)
     ap.add_argument("--top-k", type=int, default=5)
@@ -113,3 +113,4 @@ def main() -> int:  # pragma: no cover — CLI entry
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

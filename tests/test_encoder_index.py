@@ -8,9 +8,9 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from openabis.config import IndexConfig
-from openabis.encoder import ViTBiometricEncoder
-from openabis.index.factory import BruteForceIndex, build_backend
+from abisgpt.config import IndexConfig
+from abisgpt.encoder import ViTBiometricEncoder
+from abisgpt.index.factory import BruteForceIndex, build_backend
 
 DIM = 512
 
@@ -121,3 +121,4 @@ def test_index_remove_supports_erasure() -> None:
     dropped = index.remove([uids[0]])
     assert dropped == 1
     assert len(index) == 19
+

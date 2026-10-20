@@ -1,7 +1,7 @@
-# OpenABIS reference configuration
+# ABISGPT reference configuration
 # Copy to configs/local.yaml for your deployment and edit freely.
 
-openabis:
+abisgpt:
   index:
     backend: faiss          # faiss | qdrant | milvus | brute
     dim: 512                # L2-normalized embedding dim (white paper §3.2)
@@ -29,3 +29,4 @@ openabis:
     match_threshold: 0.72   # Tier-2 cosine threshold for "match" verdict
     batch_size: 32
     device: auto
+

@@ -1,4 +1,4 @@
-# OpenABIS Architecture
+# ABISGPT Architecture
 
 ## Design Goals
 
@@ -47,15 +47,15 @@ Identity resolution through the isolated Relational Vault (PII)
 
 | Layer | Module | Notes |
 |---|---|---|
-| Encoder | `openabis/encoder` | ViT wrapper; masks-aware attention weighting |
-| PAD | `openabis/pad` | rPPG + VLM guardrails + flash check fused |
-| Index | `openabis/index` | FAISS / Qdrant / Milvus backends behind one API |
-| Pipeline | `openabis/pipeline` | two-tier triage + threshold policy |
-| Vault | `openabis/vault` | UUID↔PII relational decoupling facade |
+| Encoder | `abisgpt/encoder` | ViT wrapper; masks-aware attention weighting |
+| PAD | `abisgpt/pad` | rPPG + VLM guardrails + flash check fused |
+| Index | `abisgpt/index` | FAISS / Qdrant / Milvus backends behind one API |
+| Pipeline | `abisgpt/pipeline` | two-tier triage + threshold policy |
+| Vault | `abisgpt/vault` | UUID↔PII relational decoupling facade |
 
 ## Backend Abstraction
 
-`openabis.index` exposes a single interface:
+`abisgpt.index` exposes a single interface:
 
 ```python
 backend = build_backend(config)      # faiss | qdrant | milvus
@@ -83,3 +83,4 @@ white paper.
 | Vector DB timeout | fail-closed + degrade to smaller `ef_search` retry |
 | Encoder OOM | drop to `batch/2` and retry once |
 | Vault unreachable | verdict computed, PII resolution withheld |
+

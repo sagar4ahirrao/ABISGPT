@@ -3,13 +3,13 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "openabis"
+name = "abisgpt"
 version = "0.1.0"
 description = "Multi-modal ABIS & passive PAD reference implementation: ViT encoders, VLM liveness guardrails, temporal rPPG, and two-tier ANN vector retrieval."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
-authors = [{ name = "OpenABIS Contributors" }]
+authors = [{ name = "ABISGPT Contributors" }]
 keywords = [
   "biometrics", "abis", "pad", "liveness", "deepfake-detection",
   "vision-transformer", "vision-language-model", "rppg",
@@ -54,7 +54,7 @@ dev = [
 ]
 
 [tool.setuptools.packages.find]
-include = ["openabis*"]
+include = ["abisgpt*"]
 
 [tool.black]
 line-length = 100
@@ -75,3 +75,4 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q --strict-markers"
+

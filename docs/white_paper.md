@@ -2,7 +2,7 @@
 
 **A Scalable, High-Accuracy Architecture Utilizing Vision Transformers, Vision-Language Models, and Vector Search Engines**
 
-*OpenABIS — Technical White Paper, v0.1.0 (October 2026)*
+*ABISGPT — Technical White Paper, v0.1.0 (October 2026)*
 
 ---
 
@@ -193,7 +193,7 @@ To guarantee an absolute target of **>= 99.9% recall accuracy**, the database de
 Biometric data falls under the most stringent regulatory protections globally (e.g., GDPR Article 9, CCPA, and national data sovereignty mandates). This architecture enforces a strict **Zero-Trust Biometric Vault Protocol**:
 
 - **Irreversible Cryptographic Hashes / Non-Redundancy:** Raw imagery payloads are destroyed immediately following inference encoding at the stateless Triton layer. The system stores only the derived 512-dimensional floating-point vectors.
-- **Embedding Non-Inversion Caveat (added by OpenABIS):** while embeddings cannot be trivially inverted by classical means, active research (feature-space inversion, GAN-based inversion) has demonstrated partial reconstruction attacks on some embedding families. Operate under the assumption of *probabilistic* — not absolute — non-invertibility, and layer embedding-space noise or privacy-enhancing technologies where the threat model demands it.
+- **Embedding Non-Inversion Caveat (added by ABISGPT):** while embeddings cannot be trivially inverted by classical means, active research (feature-space inversion, GAN-based inversion) has demonstrated partial reconstruction attacks on some embedding families. Operate under the assumption of *probabilistic* — not absolute — non-invertibility, and layer embedding-space noise or privacy-enhancing technologies where the threat model demands it.
 - **Vector Anonymization and Decoupling:** The vector database contains no Personally Identifiable Information (PII). Each profile is assigned a randomly generated UUID. The relational linking between that UUID and real-world metadata (names, passport numbers, credentials) resides in an isolated, firewalled, and independently encrypted relational database layer.
 - **In-Transit and Rest Encryption:** All internal data communications between edge capture clients, inference servers, and vector storage engines use mutual TLS (mTLS) certificates with AES-256 encryption standards. Databases utilize full hardware-level encryption at rest.
 
@@ -250,3 +250,4 @@ This architecture guarantees sub-second matching response paths across large pop
 6. De Kerchove, G. & Vanhamel, I. — rPPG deepfake literature overview (see `docs/BENCHMARKS.md`).
 7. ISO/IEC 30107-3: *Presentation attack detection — Testing and reporting.*
 8. GDPR Art. 9 (special category data), CCPA §1798.125, Illinois BIPA.
+

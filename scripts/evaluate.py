@@ -17,9 +17,9 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from openabis.config import IndexConfig
-from openabis.index import build_backend
-from openabis.index.factory import BruteForceIndex
+from abisgpt.config import IndexConfig
+from abisgpt.index import build_backend
+from abisgpt.index.factory import BruteForceIndex
 
 
 def build_gallery(n: int, dim: int = 512, seed: int = 2026, clusters: int = 20) -> tuple[np.ndarray, list[str]]:
@@ -39,7 +39,7 @@ def build_gallery(n: int, dim: int = 512, seed: int = 2026, clusters: int = 20) 
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="OpenABIS retrieval benchmark")
+    ap = argparse.ArgumentParser(description="ABISGPT retrieval benchmark")
     ap.add_argument("--identities", type=int, default=200)
     ap.add_argument("--queries-per-id", type=int, default=5)
     ap.add_argument("--top-k", type=int, default=10)
@@ -107,3 +107,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import torch
 
-from openabis.training.model import ArcFaceHead, ToyBiometricEncoder
-from openabis.training.synthdata import SyntheticBiometricDataset
+from abisgpt.training.model import ArcFaceHead, ToyBiometricEncoder
+from abisgpt.training.synthdata import SyntheticBiometricDataset
 
 
 def test_dataset_shapes_and_determinism():
@@ -45,3 +45,4 @@ def test_arcface_eval_mode_returns_plain_logits():
     out_train = head(emb, torch.zeros(3, dtype=torch.long))
     out_eval = head(emb)
     assert out_eval.shape == out_train.shape
+

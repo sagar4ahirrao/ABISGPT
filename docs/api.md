@@ -1,6 +1,6 @@
 # API Reference
 
-## `openabis.config`
+## `abisgpt.config`
 
 ```python
 @dataclass
@@ -31,14 +31,14 @@ pipeline:
   match_threshold: 0.72
 ```
 
-## `openabis.encoder.ViTBiometricEncoder`
+## `abisgpt.encoder.ViTBiometricEncoder`
 
 ```python
 enc = ViTBiometricEncoder.from_pretrained(cfg)
 emb = enc.encode(frames)               # list[np.ndarray HxWx3] -> (n, 512), L2-normalized
 ```
 
-## `openabis.pad.PassivePadEngine`
+## `abisgpt.pad.PassivePadEngine`
 
 ```python
 pad = PassivePadEngine(cfg.pad)
@@ -47,13 +47,13 @@ verdict = pad.evaluate(frames, fps=60)      # -> PadVerdict(passed, scores, reas
 
 Components are independently callable:
 
-- `openabis.pad.rppg.RppgAnalyzer.from_frames(frames, fps=60)` → pulse stats + liveness
-- `openabis.pad.flashdiff.FlashDiffusionAnalyzer.from_frames(frames, fps=60)` → diffuse map stats
+- `abisgpt.pad.rppg.RppgAnalyzer.from_frames(frames, fps=60)` → pulse stats + liveness
+- `abisgpt.pad.flashdiff.FlashDiffusionAnalyzer.from_frames(frames, fps=60)` → diffuse map stats
 
-## `openabis.index`
+## `abisgpt.index`
 
 ```python
-backend = openabis.index.build_backend(cfg.index)
+backend = abisgpt.index.build_backend(cfg.index)
 backend.add(ids=..., embeddings=...)      # bulk gallery enroll
 hits = backend.search(query, top_k=10)    # Tier-1 ANN triage
 ```
@@ -61,7 +61,7 @@ hits = backend.search(query, top_k=10)    # Tier-1 ANN triage
 Backends: `faiss` (IVF-HNSW + PQ), `qdrant` (client server-side `hnsw_config` +
 scalar/product quantization), `milvus` (`IVF_SQ8` / `HNSW` hybrid mode).
 
-## `openabis.pipeline.TwoTierPipeline`
+## `abisgpt.pipeline.TwoTierPipeline`
 
 ```python
 pipe = TwoTierPipeline(encoder, pad, index_backend, cfg.pipeline)
@@ -69,7 +69,7 @@ result = pipe.enroll(identity_id, images)             # returns (id, embedding)
 verdict = pipe.identify(probe, top_k=10)              # Tier-1 triage + Tier-2 rerank
 ```
 
-## `openabis.vault.VectorVault`
+## `abisgpt.vault.VectorVault`
 
 ```python
 vault = VectorVault(db_path="vault.db")   # reference impl; swap for prod store
@@ -77,3 +77,4 @@ vault.link("uuid-...", {"name_hash": sha256(name), "kyc_ref": "..."})
 ```
 
 Never store raw PII in the vector DB — only `uuid`.
+

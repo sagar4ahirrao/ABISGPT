@@ -1,12 +1,12 @@
-# OpenABIS reference stack: Qdrant vector graph + the FastAPI service.
+# ABISGPT reference stack: Qdrant vector graph + the FastAPI service.
 #
 #   docker compose up -d          # start qdrant + api
 #   curl localhost:8000/health
 #   docker compose down           # stop (add -v to wipe the vector store)
 #
 # The api image is torch-free (hash encoder + rPPG/flash PAD). Env knobs:
-#   OPENABIS_VLM=heuristic  enables the texture-statistics VLM stand-in tier
-#   OPENABIS_CONFIG=/app/configs/model.yaml mounts the YAML knobs into the service
+#   ABISGPT_VLM=heuristic  enables the texture-statistics VLM stand-in tier
+#   ABISGPT_CONFIG=/app/configs/model.yaml mounts the YAML knobs into the service
 
 services:
   qdrant:
@@ -27,9 +27,9 @@ services:
       context: .
       dockerfile: docker/Dockerfile
     environment:
-      OPENABIS_INDEX_BACKEND: qdrant
-      OPENABIS_INDEX_URI: http://qdrant:6333
-      OPENABIS_VLM: heuristic
+      ABISGPT_INDEX_BACKEND: qdrant
+      ABISGPT_INDEX_URI: http://qdrant:6333
+      ABISGPT_VLM: heuristic
     ports:
       - "8000:8000"
     depends_on:
@@ -38,3 +38,4 @@ services:
 
 volumes:
   qdrant_data:
+

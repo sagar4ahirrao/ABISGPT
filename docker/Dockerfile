@@ -11,10 +11,10 @@ RUN pip install --no-cache-dir -r /tmp/requirements-light.txt
 
 WORKDIR /app
 COPY pyproject.toml README.md ./
-COPY openabis ./openabis
+COPY abisgpt ./abisgpt
 COPY configs ./configs
 
 RUN pip install --no-cache-dir -e . --no-deps
 
 EXPOSE 8000
-CMD ["uvicorn", "openabis.api.service:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "abisgpt.api.service:app", "--host", "0.0.0.0", "--port", "8000"]

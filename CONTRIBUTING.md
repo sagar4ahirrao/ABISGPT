@@ -1,4 +1,4 @@
-# Contributing to OpenABIS
+# Contributing to ABISGPT
 
 Thanks for considering a contribution. This project publishes a *technical
 white paper plus reference implementation*, so submissions fall into two
@@ -19,8 +19,8 @@ buckets — research writing and code — with a shared bar for evidence.
 
    ```bash
    pip install -e ".[dev]"
-   ruff check openabis scripts tests --fix
-   black openabis scripts tests
+   ruff check abisgpt scripts tests --fix
+   black abisgpt scripts tests
    pytest -q
    ```
 
@@ -55,3 +55,4 @@ Reviewers will look for:
 For model weights, datasets, or >5k-line refactors, please discuss first in
 the issue tracker. Model artifacts live in external storage (Hugging Face
 Hub, Zenodo) and are referenced from the code — not committed to git.
+

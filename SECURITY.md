@@ -1,4 +1,4 @@
-# Security Policy — OpenABIS
+# Security Policy — ABISGPT
 
 ## Supported versions
 
@@ -14,8 +14,8 @@
 Email: **security@[replace-with-domain]** (PGP key to be published at
 `.well-known/security.txt`). Include:
 
-1. Affected component (`openabis.encoder`, `openabis.pad`, `openabis.index`,
-   `openabis.pipeline`, `openabis.vault`, scripts, docs claims).
+1. Affected component (`abisgpt.encoder`, `abisgpt.pad`, `abisgpt.index`,
+   `abisgpt.pipeline`, `abisgpt.vault`, scripts, docs claims).
 2. Reproduction steps / PoC. Synthetic data only — never attach real
    biometric samples, templates, or dumps.
 3. Step-by-step impact assessment if achievable.
@@ -39,7 +39,7 @@ engineering.
 
 - This is **research software**. Nothing here has completed a security audit;
   do not deploy against production PII.
-- The "vector vault" (`openabis.vault`) is a reference for the decoupling
+- The "vector vault" (`abisgpt.vault`) is a reference for the decoupling
   pattern (raw media destroyed post-inference; UUID↔PII mapping lives in an
   isolated, independently encrypted relational store). It demonstrates the
   pattern with a local SQLite facade — swap in your own hardened store.
@@ -57,3 +57,4 @@ engineering.
 - [ ] Rate limiting + anomaly detection on `/search` and `/enroll`
 - [ ] Model weights pinned + checksummed (supply-chain)
 - [ ] Audit logs for every identification decision
+

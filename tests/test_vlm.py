@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import numpy as np
 
-from openabis.pad.fusion import PassivePadEngine
-from openabis.pad.vlm import HeuristicVlmPad, VlmReport
+from abisgpt.pad.fusion import PassivePadEngine
+from abisgpt.pad.vlm import HeuristicVlmPad, VlmReport
 
 
 def test_heuristic_scores_clean_capture_high():
@@ -43,3 +43,4 @@ def test_vlm_rejection_reason_recorded():
     engine = PassivePadEngine(vlm_scorer=AlwaysSpoof())
     verdict = engine.evaluate(frames)
     assert any("VLM" in r for r in verdict.reasons)
+

@@ -7,8 +7,8 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from openabis.pad.flashdiff import FlashDiffusionAnalyzer
-from openabis.pad.rppg import LIVE_SNR_DB_MIN, RppgAnalyzer
+from abisgpt.pad.flashdiff import FlashDiffusionAnalyzer
+from abisgpt.pad.rppg import LIVE_SNR_DB_MIN, RppgAnalyzer
 
 FPS = 30.0
 
@@ -69,8 +69,8 @@ def test_flashdiff_finds_high_laplacian_for_replays() -> None:
 
 
 def test_pad_fusion_scores_live_and_spoof_frames() -> None:
-    from openabis.config import PadConfig
-    from openabis.pad import PassivePadEngine
+    from abisgpt.config import PadConfig
+    from abisgpt.pad import PassivePadEngine
 
     engine = PassivePadEngine(PadConfig(fps=int(FPS)))
     live = engine.evaluate(_live_frames(bpm=72.0))
@@ -82,3 +82,4 @@ def test_pad_fusion_scores_live_and_spoof_frames() -> None:
                    for _ in range(96)]
     dead = engine.evaluate(dead_frames)
     assert not dead.is_live
+

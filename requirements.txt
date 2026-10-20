@@ -16,3 +16,4 @@ faiss-cpu>=1.8
 pytest>=8.0
 ruff>=0.5
 black>=24.0
+

@@ -1,1 +1,0 @@
-"""OpenABIS HTTP API package."""

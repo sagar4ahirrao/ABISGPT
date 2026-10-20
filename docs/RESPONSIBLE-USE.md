@@ -1,13 +1,13 @@
 # Responsible Use Policy
 
-OpenABIS is dual-use technology. Biometric infrastructure can automate
+ABISGPT is dual-use technology. Biometric infrastructure can automate
 lawful, consent-based identity workflows (eKYC, border control, banking
 onboarding, device unlock) **and** can be repurposed to conduct mass
 surveillance without anyone's knowledge or consent.
 
 ## Prohibited use
 
-You may **not** use OpenABIS, in whole or in derived form, to:
+You may **not** use ABISGPT, in whole or in derived form, to:
 
 1. Identify or track an individual **without their informed consent** and a
    lawful basis under applicable data-protection law.
@@ -53,3 +53,4 @@ passive PAD stack is 100% robust:
   certified lab confirms it).
 
 Treat all claims as a research *baseline*, not a guarantee.
+
