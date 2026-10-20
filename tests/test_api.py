@@ -77,7 +77,11 @@ def test_dashboard_page_serves():
     client = TestClient(svc.app)
     r = client.get("/")
     assert r.status_code == 200
-    assert "ABISGPT Interactive Test Dashboard" in r.text
+    assert "ABISGPT Biometric Console" in r.text
+    # the console must reference every match mode + PAD + registry + N:N
+    for token in ("verify", "identify", "crossmatch", "liveness", "enroll",
+                  "upload"):
+        assert token.lower() in r.text.lower()
 
 
 def test_api_status_includes_torch_info():
@@ -159,6 +163,25 @@ def test_identities_listing_and_nn_dedup_endpoint():
     assert body["n_duplicates"] == 0
     assert body["pairs_scored"] == 9          # 3 x 3 full matrix (self excluded)
     assert "pairs_per_sec" in body
+
+
+def test_verify_photo_mode_pad_bypass_honest_none():
+    """pad=false on /verify skips the gate; pad_live must read null."""
+    svc.reset_pipeline()
+    client = TestClient(svc.app)
+    client.post("/enroll", json={"identity_id": "vbypass",
+                                 "frames": _make_frames(seed=5)})
+    r = client.post("/verify", params={"identity_id": "vbypass", "pad": "false"},
+                    json={"frames": _make_frames(seed=5)})
+    body = r.json()
+    assert body["pad_live"] is None
+    assert body["is_match"] or body["score"] >= 0.0
+    # gate stays fail-closed when NOT bypassed:
+    r = client.post("/verify", params={"identity_id": "vbypass", "pad": "true"},
+                    json={"frames": _make_frames(seed=5)})
+    b2 = r.json()
+    assert b2["pad_live"] is False
+    assert b2["is_match"] is False and b2["score"] == 0.0
 
 
 def test_identify_photo_mode_pad_bypass():

@@ -7,7 +7,7 @@ evaluate per tier on STILL CROPS:
 
   * VLM texture tier (HeuristicVlmPad; calibrated for 0..255 uint8 input)
     and optionally the real CLIP zero-shot VLM (`--clip`, downloads weights).
-  * Theата full `PassivePadEngine` on single frames fails closed
+  * The full `PassivePadEngine` on single frames fails closed
     (rPPG needs >= 12-frame temporal sequences, flash needs pairs) —
     reported as the fail-closed property, not an accuracy metric.
 
@@ -61,7 +61,6 @@ def main() -> int:
     npz = np.load(args.dataset, allow_pickle=True)
     frames = npz["frames"]                       # (N,64,64,3) float32 [0,1]
     labels = npz["labels"].astype(np.int64)      # 0=bona-fide, 1=attack
-    names = [str(n) for n in npz["names"]]
     rng = np.random.default_rng(args.seed)
 
     for cid in (0, 1):
@@ -95,7 +94,7 @@ def main() -> int:
     if args.clip:
         try:
             clip = __import__("abisgpt.pad.vlm", fromlist=["ClipVlmPad"]).ClipVlmPad()
-            res_c = collect(clip.score, "clip_vlm")
+            res_c = collect(lambda f: float(clip.score(f).liveness_score), "clip_vlm")
             results["clip_vlm"] = res_c
         except Exception as exc:                              # noqa: BLE001
             results["clip_vlm"] = {"tier": "clip_vlm", "error": str(exc)[:200]}

@@ -33,7 +33,6 @@ import argparse
 import hashlib
 import io
 import json
-import sys
 import urllib.request
 from pathlib import Path
 
@@ -91,8 +90,8 @@ def _fetch_tarball(dest: Path) -> str:
 def load_casiafasd(frames_per_real_cap: int, frames_per_fake_cap: int,
                    max_frames: int, seed: int):
     """Return (names, labels) tuples; caller decodes with PIL lazily."""
-    import tarfile
     import random
+    import tarfile
 
     gz_path = RAW_DIR / "casiafasd.tar.gz"
     _fetch_tarball(gz_path)
@@ -136,7 +135,6 @@ def load_casiafasd(frames_per_real_cap: int, frames_per_fake_cap: int,
     return tar, selected
 
 
-import numpy as np
 
 def _decode(tar, selected, resize: int):
     """Decode crops to (N, resize, resize, 3) float32 in [0, 1]."""

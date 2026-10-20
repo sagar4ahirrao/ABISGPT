@@ -125,3 +125,78 @@ GET  /health               → enrolled 0 (fully erased)
 - Milvus backend implemented but not exercised live (lazy import, no container).
 - GT 1030 VRAM (2 GB) bounds ViT batch sizes; nothing in this repo is
   validated beyond toy-scale training on it.
+
+---
+
+# Supplement (2026-10-20 session): real-data runs + transformer backbones
+
+## S.1 Real datasets actually downloaded, trained and evaluated
+
+| Dataset | n | Result | Verdict |
+|---|---|---|---|
+| **Olivetti/AT&T faces** (`artifacts/dataset/olivetti.npz`, sklearn figshare) | 400 imgs / 40 ids | trained toy CNN+ArcFace 30 ep @ 39.7 s CUDA → **recall@1 0.9875 · recall@5 1.0 · EER 0.0014** (80 probes / 3120 impostor scores) | PASS — real-data recognition works |
+| **SOCOFing fingerprints** (HF `veerav96/sokoto_real`, 1000×64×64×3 / 100 ids) | 1000 | recall@1 0.01 · EER 0.506 = chance; pixel-corr intra 0.9035 ≈ inter 0.9092 | known limit — global-avg-pool toy encoder can't read local minutiae; production minutiae/ArcFace-finger encoder is the documented swap-in |
+| **UniDataPro iris sample** (HF, 12 imgs / 6 ids) | 12 | n too small for any split | dataset shortfall, not a code claim |
+| **CASIA-FASD PAD** (mirror npz 927/927 + raw 256×256 archive) | 4063 imgs | see S.2/S.3 | tier-level honest + fail-closed engine |
+
+## S.2 Transformer backbones actually exercised (user question S-2026-10-20)
+
+**What was *created and trained* here: one CNN+ArcFace model (toy scale).**
+Transformer models in this repo are *pretrained* backbones (downloaded, not
+regionally trained) — the industry-correct usage — and both were actually
+downloaded and evaluated in this session:
+
+| Backbone | Where | Run | Result |
+|---|---|---|---|
+| **DINOv2 ViT-B/16** (timm `vit_base_patch16_224.dino`, ~86 M params) | `scripts/eval_dinov2_olivetti.py`, same seed-0 protocol as the trained CNN | embed 400 imgs (287.6 s CUDA, weights auto-download) | **recall@1 0.95 · recall@5 0.9625 · EER 0.0875** |
+| **CLIP ViT-B/32 zero-shot** (`openai/clip-vit-base-patch32`) | `scripts/eval_pad_casia.py --clip` PAD tier | 558 still crops (64×64) | **AUC 0.572 — catches 80% of attacks (TPR 0.796) but only 10% TNR at the 0.5 gate** → attack-biased at crop resolution |
+
+Reading, honestly:
+- Frozen DINOv2 is *behind* the from-scratch CNN+ArcFace head on Olivetti
+  (0.95 vs 0.9875 recall@1; EER 8.75% vs 0.14%) — general-purpose SSL
+  features lose to task-finetuning at this scale, which is exactly why the
+  pipeline's ArcFace fine-tune path is the production line and DINOv2 is a
+  seed/fallback backbone.
+- CLIP zero-shot on 64×64 stills is above chance but not deployment-grade;
+  the tier's usable-tier status stays "research", full kiosk liveness still
+  belongs to the 12+ frame rPPG engine (fail-closed verified on single frames).
+
+## S.3 Fixed-threshold texture tier diagnosed & ceiling measured
+
+Hypothesis "64×64 downscale destroyed the banding signal, not the tier" was
+**falsified** (`artifacts/pad_native_diag*.json`, native 256×256 re-run):
+- Shipped scorer saturates: ALL cropped photos → liveness 0.0 at native res
+  (fixed |lap|>4 threshold is contrast-brittle); AUC exactly 0.5.
+- Raw energy feature alone is mildly informative: best-threshold calibration
+  reaches **0.7505 train / 0.7442 test accuracy** (AUC ≈ 0.68) — still below
+  production quality. Conclusion stands: `HeuristicVlmPad` is a synthetic-bench
+  stand-in; photo-PAD = CLIP/post-prod tier + pulse engine.
+
+## S.4 Simple console UI (user request "keep simple to upload biometric
+and perform all features available as chosen")
+
+Replaced the multi-card dashboard with a 3-card flow:
+`upload face photo (click or drag) → choose action (Enroll / Verify 1:1 /
+Identify 1:N / Liveness;PAD / N:N cross-match) → Run`, plus a registry card
+with GDPR forget and a compact API reference. Stills default to research
+PAD-bypass (`pad=false`, honest `pad_live: null`); a single "treat as live
+frames" switch re-enables the fail-closed gate.
+
+## S.5 Live e2e smoke of the new console (real faces, Qdrant container)
+
+`scripts/ui_smoke.py` → **11/11 PASS** (real Olivetti face, browser-identical
+32×32 conversion):
+enroll → verify match (cosine 1.0) → bypass pad=null → fail-closed when gate
+on → identify rank-1 → 2nd identity → registry list → rank-stable identify →
+PAD-only verdict → N:N clean 0 dups → double-enroll detected (score 1.0) →
+forget (HTTP 200, removed 1, then 404).
+
+`pytest tests -q` → **39 passed / 2 skipped** · `ruff check` all-clean after fixes:
+verify-bypass returns honest `pad_live: null` (`abisgpt/api/service.py`),
+console-title test, endpoint contract (`decision` for identify vs `is_match`
+for verify), `/pad` response shape fix for CLIP wrapper.
+
+## S.6 Remaining GPU-backed next steps
+
+- CLIP tier at native 224² on full CASIA-FASD train+test (GPU-bound; ~1 h CPU, minutes on RTX) — remote `dev@13.235.199.152:2222` offered when needed.
+- SoCOFing fingerprint ArcFace fine-tune (needs minutiae-aware encoder, CPU too slow).
