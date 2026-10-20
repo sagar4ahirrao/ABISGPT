@@ -134,24 +134,45 @@ ABISGPT_RUN_INTEGRATION=1 ABISGPT_QDRANT_URI=http://localhost:6333 pytest tests/
 
 ## Architecture at a glance
 
+```mermaid
+flowchart TB
+    IN["Capture frames<br/>(video / multi-source)"] --> subPAD
+
+    subgraph subPAD["Passive PAD — fail-closed gate"]
+        direction LR
+        RP["rPPG<br/>pulse tier"]
+        FL["Flash<br/>diffusion tier"]
+        VM["VLM<br/>texture tier"]
+        RP --> W(("weighted<br/>fusion"))
+        FL --> W
+        VM --> W
+    end
+
+    W --> LIVE{"live ≥<br/>gate_threshold ?"}
+    LIVE -- "attack / below gate" --> REJ["REJECT (fail-closed)<br/>no template is taken"]
+    LIVE -- live --> ENC["ViT encoder<br/>512-D template<br/>L2-normalized"]
+    ENC --> T1["Tier-1 ANN triage<br/>IVF-HNSW-PQ graph<br/>64-B PQ-ready vectors"]
+    T1 -- "top-k ids" --> T2["Tier-2 exact rerank<br/>cosine on the shortlist"]
+    T2 --> DEC{"tier2 score ≥<br/>match_threshold ?"}
+    DEC -- yes --> MATCH["MATCH"]
+    DEC -- no --> NOMATCH["NO MATCH<br/>(honest non-match)"]
 ```
-            frames (video)
-                |
-   ┌────────────▼────────────┐
-   │  passive PAD (fail-closed)│──✗──▶  reject spoof
-   │   rPPG · flash · VLM tier │
-   └────────────┬────────────┘
-                │ live
-   ┌────────────▼────────────┐
-   │  ViT encoder (512-D)    │       L2-normalized template
-   └────────────┬────────────┘
-                │
-   ┌────────────▼────────────┐        ┌──────────────────────┐
-   │ Tier-1: ANN triage      │───k───▶│ Tier-2: exact rerank │──▶ MATCH
-   │ IVF-HNSW-PQ / Qdrant    │        │ on top-k only        │
-   └─────────────────────────┘        └──────────────────────┘
-     search O(log N), 64-B vec         cosine / minutiae-ready
-```
+
+The three **match modes** sit on top of the same two tiers:
+
+```mermaid
+flowchart LR
+    subgraph M11["1 : 1 verify — authentication"]
+        A["probe + claimed id"] --> G["PAD gate"] --> E["encode"] --> C["exact cosine vs claimed"] --> D
+        D{"≥ threshold?"} --> R1["MATCH / REJECT"]
+    end
+    subgraph M1N["1 : N identify — identification"]
+        A["probe"] --> G["PAD gate"] --> E["encode"] --> ANN["Tier-1 ANN"] --> RX["Tier-2 rerank"] --> R2["decision + top-k"]
+    end
+    subgraph MNN["N : N cross-match — watchlist / dedup"]
+        P["probe set"] --> W1["chunked GEMM (~92 M pairs/s)<br/>small N · exact"]
+        P --> W2["ANN screen + exact rescore<br/>large N (10M plan)"] --> R3["pairs ≥ threshold"]
+    end
 
 Deep-dive: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) ·
 full protocol: [docs/BENCHMARKS.md](docs/BENCHMARKS.md) ·
@@ -163,7 +184,7 @@ per-module reference: [docs/api.md](docs/api.md).
 ABISGPT/
 |-- README.md · LICENSE · CITATION.cff
 |-- pyproject.toml · requirements.txt
-|-- docker-compose.yml          # Qdrant + torch-free API containers
+|-- docker-compose.yml          # Qdrant + torch-free API containers (+ optional Milvus profile)
 |-- configs/model.yaml          # every tuning knob (m, ef_search, PQ, weights)
 |-- .github/workflows/ci.yml    # ruff + pytest py3.10/3.11 × ubuntu/windows
 |-- docs/
@@ -180,7 +201,10 @@ ABISGPT/
 |   |-- training/               # synthetic dataset · ArcFace · trainer/eval
 |   +-- vault/                  # SQLite UUID<->PII decoupling facade
 |-- scripts/                    # demo_synthetic · evaluate · train_encoder · api_smoke
-+-- tests/                      # 28 tests (+1 live-container integration test)
+|   |-- prepare_dataset.py      # Olivetti (AT&T) download -> npz (`gitignore'd artifacts/)
+|   |-- train_olivetti.py       # real-face training: recall@1 0.9875 / EER 0.0014
+|   +-- scale_test.py           # national-ID scale harness (25k..500k measured)
++-- tests/                      # 34 tests (+2 live-container integration tests: Qdrant, Milvus)
 ```
 
 ## Feature Matrix
@@ -188,7 +212,7 @@ ABISGPT/
 | Capability | Default | Key knobs (`configs/model.yaml`) |
 |---|---|---|
 | Tier-1 ANN graph | FAISS IVF-HNSW-PQ | `m`, `ef_search`, `nlist`, `nprobe`, `pq_segments`, `pq_bits` |
-| Server index | Qdrant HNSW + server-side PQ | `ABISGPT_INDEX_BACKEND=qdrant`, `ABISGPT_INDEX_URI` |
+| Server index | Qdrant or **Milvus 2.3** (HNSW+PQ) | `ABISGPT_INDEX_BACKEND=qdrant\|milvus`, `ABISGPT_INDEX_URI` |
 | PAD fusion weights | 0.4 rPPG / 0.4 flash / 0.2 VLM | `pad.rppg_weight` etc., `gate_threshold` |
 | VLM tier | none | `ABISGPT_VLM=heuristic|clip` |
 | Encoder | hash (clean-room, no weights) | `encoder.strategy=torch` (opt-in) |

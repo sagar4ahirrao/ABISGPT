@@ -76,10 +76,10 @@ class MilvusIndex(VectorIndex):
         self.collection = col
 
     def add(self, ids: Sequence[str], embeddings: np.ndarray) -> None:
-        rows = [
-            (uid, vec.astype(float).tolist()) for uid, vec in zip(ids, np.asarray(embeddings), strict=False)
-        ]
-        self.collection.insert(rows)
+        ids_list = [str(u) for u in ids]
+        vec_list = np.asarray(embeddings, dtype=np.float32).tolist()
+        # pymilvus 2.x columnar schema order must match the schema fields
+        self.collection.insert([ids_list, vec_list])
         self.collection.flush()
 
     def search(self, query: np.ndarray, top_k: int = 10) -> list[tuple[str, float]]:

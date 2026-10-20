@@ -106,46 +106,48 @@ def main() -> int:
         print(f"  epoch {epoch + 1}/{args.epochs} loss={total / max(seen, 1):.4f}", flush=True)
     train_s = time.perf_counter() - t0
 
-    # ---- encoder-quality evaluation on unseen real frames --------------- #
+    # ---- encoder-quality evaluation: unseen REAL faces ------------------ #
+    protocol = ("gallery=mean template of the 8 train frames/identity; "
+                "probes=2 held-out frames each (no self-inclusion)")
     encoder.eval()
     with torch.no_grad():
-        emb = encoder(test_x).cpu().numpy()                   # (80, 512)
-    emb = emb / np.maximum(np.linalg.norm(emb, axis=1, keepdims=True), 1e-9)
+        train_x = to_tensor(frames[train_idx]).to(device)
+        emb_train = encoder(train_x).cpu().numpy()
+        emb_probe = encoder(test_x).cpu().numpy()
+    emb_train /= np.maximum(np.linalg.norm(emb_train, axis=1, keepdims=True), 1e-9)
+    emb_probe /= np.maximum(np.linalg.norm(emb_probe, axis=1, keepdims=True), 1e-9)
 
-    # gallery: mean template per identity from its 2 held-out frames
-    templates = np.zeros((n_classes, emb.shape[1]), dtype=np.float32)
+    train_y = labels[train_idx]
+    templates = np.zeros((n_classes, emb_train.shape[1]), dtype=np.float32)
     for cid in range(n_classes):
-        e = emb[test_y == cid]
+        e = emb_train[train_y == cid]
         templates[cid] = e.mean(axis=0)
     templates /= np.maximum(np.linalg.norm(templates, axis=1, keepdims=True), 1e-9)
 
-    sims = emb @ templates.T                                  # probe × template
-    probe_is_template_avg = np.isclose(
-        (templates[test_y] * emb).sum(axis=1), np.ones(len(test_y)) * 0.5, atol=0.25)
+    sims = emb_probe @ templates.T                            # (80, 40): probe × identity
+    top1 = float(np.mean([1.0 if np.argmax(sims[i]) == test_y[i] else 0.0
+                          for i in range(len(test_y))]))
+    top5 = float(np.mean([1.0 if test_y[i] in np.argsort(-sims[i])[:5] else 0.0
+                          for i in range(len(test_y))]))
 
-    # leave-one-out recall: each probe frame vs gallery built excluding itself
-    top1 = []
-    top5 = []
-    for i in range(len(test_y)):
-        own = test_y[i]
-        s = sims[i].copy()
-        s[own] -= 10.0                        # exclude the exact template containing this frame
-        order = np.argsort(-s)
-        top1.append(1.0 if order[0] == own else 0.0)
-        top5.append(1.0 if own in order[:5] else 0.0)
-    # official-protocol score: full-template probe = the *average* vector itself
-    proto_recall1 = float(np.mean([1.0 if np.argmax(sims[i]) == test_y[i] else 0.0
-                                   for i in range(len(test_y))]))
+    # genuine vs impostor similarity distributions -> EER (closed-set, 40 ids)
+    genuine = np.array([sims[i, test_y[i]] for i in range(len(test_y))])
+    impostor = np.array([sims[i, c] for i in range(len(test_y))
+                         for c in range(n_classes) if c != test_y[i]])
+    thresholds = np.unique(np.concatenate([np.sort(impostor), np.sort(genuine)]))
+    far = np.array([(impostor >= t).mean() for t in thresholds])
+    frr = np.array([(genuine < t).mean() for t in thresholds])
+    idx_eer = int(np.argmin(np.abs(far - frr)))
 
     metrics = {
-        "protocol": "Olivetti 8/2 held-out per identity, 40 ids, leave-template-out probes",
-        "recall@1": round(float(np.mean(top1)), 4),
-        "recall@5": round(float(np.mean(top5)), 4),
-        "recall@1_template_excluded_note": "probe frame excluded from its own gallery template",
-        "template_probe_recall@1": round(proto_recall1, 4),
-        "fmr_closedset_floor": 0.0,
-        "mean_template_probe_sim": round(float(np.mean(
-            sims[np.arange(len(test_y)), test_y])), 4),
+        "protocol": protocol,
+        "recall@1": round(top1, 4),
+        "recall@5": round(top5, 4),
+        "mean_genuine_sim": round(float(genuine.mean()), 4),
+        "mean_impostor_sim": round(float(impostor.mean()), 4),
+        "eer": round(float((far[idx_eer] + frr[idx_eer]) / 2), 4),
+        "n_probes": int(len(test_y)),
+        "n_impostor_scores": int(impostor.size),
         "train_s": round(train_s, 1),
         "device": device,
         "torch": torch.__version__,

@@ -60,7 +60,6 @@ def test_verify_1v1_pad_gate_blocks_replay(engine):
 
 
 def test_batch_identify_routing(engine):
-    rng = np.random.default_rng(2)
     f_a, f_b = _live_frames(np.random.default_rng(3)), _live_frames(np.random.default_rng(4))
     engine.pipeline.enroll("a", f_a)
     engine.pipeline.enroll("b", f_b)

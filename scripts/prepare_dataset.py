@@ -82,9 +82,9 @@ def load_lfw(min_frames: int) -> tuple[np.ndarray, np.ndarray, list[str], str]:
     labels_all = np.asarray(ds.target, dtype=np.int64)
     counts = np.bincount(labels_all)
     keep_ids = np.where(counts >= min_frames)[0] if min_frames > 0 else np.arange(len(counts))
-    keep_mask = np.isin(labels_all, keep_ids)
+    mask = np.isin(labels_all, keep_ids)
     remap = {int(old): new for new, old in enumerate(sorted(int(i) for i in keep_ids))}
-    labels = np.asarray([remap[int(l)] for l in labels_all[mask]], dtype=np.int64)
+    labels = np.asarray([remap[int(lab)] for lab in labels_all[mask]], dtype=np.int64)
     names = [str(ds.target_names[int(old)]) for old in sorted(int(i) for i in keep_ids)]
     source = (
         "sklearn.datasets.fetch_lfw_people — Labeled Faces in the Wild, "
@@ -96,7 +96,7 @@ def load_lfw(min_frames: int) -> tuple[np.ndarray, np.ndarray, list[str], str]:
 def _relabel(labels: np.ndarray, keep_ids: np.ndarray) -> tuple[np.ndarray, list[str]]:
     """Map kept raw identity ids -> contiguous 0..K-1 + identity names."""
     remap = {int(old): new for new, old in enumerate(sorted(int(i) for i in keep_ids))}
-    new_labels = np.asarray([remap[int(l)] for l in labels], dtype=np.int64)
+    new_labels = np.asarray([remap[int(lab)] for lab in labels], dtype=np.int64)
     names = [f"person_{i:03d}" for i in range(len(keep_ids))]
     return new_labels, names
 
