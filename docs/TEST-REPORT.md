@@ -198,5 +198,62 @@ for verify), `/pad` response shape fix for CLIP wrapper.
 
 ## S.6 Remaining GPU-backed next steps
 
-- CLIP tier at native 224² on full CASIA-FASD train+test (GPU-bound; ~1 h CPU, minutes on RTX) — remote `dev@13.235.199.152:2222` offered when needed.
-- SoCOFing fingerprint ArcFace fine-tune (needs minutiae-aware encoder, CPU too slow).
+- CLIP tier at native 224² on full CASIA-FASD train+test — **done, §S.7**.
+- SoCOFing fingerprint ArcFace fine-tune — **done, §S.7 (negative result)**.
+
+## S.7 Remote GPU runs + real-browser UI sweep (final session additions)
+
+### S.7.1 Playwright real-browser e2e of the console (`scripts/e2e_ui.py`, chromium)
+
+Drove the actual upload→action→Run flow in headless Chromium against the live
+container, with per-step screenshots (`artifacts/ui_shots/*.png`). Final state
+**12/12 PASS**, zero console/page errors. During the sweep it found and
+verified **four real shipped-page bugs**, all fixed in
+`artifacts/dashboard_new.html` + re-grafted:
+
+| # | Symptom | Root cause | Fix |
+|---|---|---|---|
+| 1 | Clicking upload did nothing; **every** feature dead | `_DASHBOARD_HTML = """…"""` unescaped `\n`/`\'` in the inlined JS at Python-parse time → browser saw literal newlines → "Invalid or unexpected token" → whole script never ran | raw string `r"""` (graft emits it); node `--check` on the served page added (`artifacts/check_served_js.py`) |
+| 2 | After one Verify, **no second person could ever be enrolled** (name field became a dropdown) | Verify mode `replaceWith`-swapped the free-text `<input id=identity>` for a `<select>` and never swapped back | both widgets kept in DOM, visibility toggles by mode (`#identity` input ↔ `#identity-sel` select) |
+| 3 | N:N cross-match hung on "N:N cross-match…" forever | `await fetch(...).json()` calls `.json` on the *Promise*, not the Response → TypeError | `await (await fetch(...)).json()` |
+| 4 | Identify verdict showed "MATCH — undefined" | top candidate read a field identify doesn't return | use `r.candidates[0].identity_id` |
+
+Checks covered: page load, upload via file chooser (preview + Run enable),
+enroll (real Olivetti jpg through the UI), identity dropdown population,
+verify 1:1 (score 1.0000), identify 1:N rank-1, PAD verdict rendering,
+N:N crossmatch (duplicate detection exercised), registry listing, forget.
+
+### S.7.2 Remote RTX 5090 runs (`scripts/remote/*.py`, results in `artifacts/remote/`)
+
+**CLIP ViT-B/32 zero-shot PAD at native resolution, full CASIA-FASD**
+(`eval_pad_clip_native.py` — 4,063 images across both `train`+`test` color
+splits, spoof-anchor vs live-anchor margin scoring, ~860 img/s):
+
+| split | n (real) | AUC | best-τ acc | TPR @0.5 gate |
+|---|---|---|---|---|
+| train | 1,655 (404) | 0.7089 | 0.7656 | 0.2252 |
+| test | 2,408 (591) | 0.7182 | 0.7550 | 0.1980 |
+
+Native resolution roughly doubles the crop-tier AUC (0.572 → 0.718) but the
+zero-shot margin stays attack-biased at a fixed gate (stops most photo
+attacks while letting ~80% of real presentations through). Deployable
+liveness verdict remains the engineered 12+ frame rPPG engine; CLIP stays a
+"research"-tier fallback.
+
+**SOCOFing ArcFace fingerprint fine-tune — honest negative result**
+(`train_socofing.py`, identity-split 60 train / 40 eval ids, 5+5 template/
+probe frames, 150 epochs with shift+rotation augmentation, ArcFace s=16/m=0.10):
+
+- Trained model on **unseen** fingers: recall@1 0.01, EER 0.495
+  (final train loss 3.77 — converged on its 60 training identities).
+- Untrained raw-pixel cosine baseline on the identical split: recall@1 0.01,
+  EER 0.500, and the tell — mean genuine sim 0.9462 ≈ impostor 0.9458:
+  every 64×64 grayscale crop cosine-collapses onto the shared ridge/ink
+  background structure, so the cohort carries essentially *no cross-frame
+  discriminative signal* for unseen fingers.
+- Conclusion: discriminative fingerprint matching from this 100-identity,
+  10-frame/finger SOKOKO subset requires minutiae-classical features or
+  training on orders more identities (SOCOFing-paper scale). Recorded as a
+  documented limitation; the repo's fingerprint path stays at its
+  verified pipeline score rather than a false fine-tune claim.
+

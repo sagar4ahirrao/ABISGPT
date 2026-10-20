@@ -39,7 +39,7 @@ biometrics — run the whole stack on a laptop, then bring your own data.
 | Index | FAISS IVF-HNSW-PQ (bulk-trained) · Qdrant (live-tested) · Milvus | ✅/⚠️/⚠️ |
 | Pipeline | Two-tier triage `Tier1 ANN → Tier2 exact rerank`, fail-closed gate | ✅ |
 | Privacy | GDPR Art. 17 erasure endpoint + `abisgpt.vault` SQLite facade | ✅ |
-| API | FastAPI service + **interactive test dashboard** at `/` | ✅ |
+| API | FastAPI service + **simple upload-first console** at `/` (Enroll / Verify 1:1 / Identify 1:N / PAD / N:N + registry + GDPR forget) | ✅ |
 | Docker | Qdrant + torch-free API image via `docker compose up` | ✅ |
 | Training | Procedural biometrics + ArcFace head, CPU **and GPU** | ✅ |
 | Eval | Registry-scale recall/latency harness (`scripts/evaluate.py`) | ✅ |
@@ -102,19 +102,23 @@ python scripts/evaluate.py --identities 12000          # FAISS IVF-HNSW-PQ
 | slot-level (exact vector) recall@10 | 0.38 — expected cost of 512-D → 64-byte PQ |
 | Tier-1 latency p50 | **0.32 ms** |
 
-### Docker: live Qdrant + HTTP API + test dashboard
+### Docker: live Qdrant + HTTP API + simple console UI
 
 ```bash
 docker compose up -d --build
-browse http://localhost:8000/          # interactive test dashboard
+browse http://localhost:8000/          # upload-first biometric console
 python scripts/api_smoke.py http://localhost:8000   # SMOKE: PASS
+python scripts/ui_smoke.py                          # API-level e2e: ALL PASS
+python scripts/e2e_ui.py                            # Playwright browser e2e: ALL PASS
 ```
 
-The dashboard (vanilla JS, no build step) lets you fire one-off runs from the
-browser: **service status** (incl. torch/cuda build), **PAD gate probes**
-(live pulse-carrier vs flat screen-replay), **retrieval bench**
-(recall@5 + latency at 300/3000 scale), and **quick-train** ArcFace runs
-(CPU or CUDA) with live progress polling.
+The console (vanilla JS, no build step) is a 3-card flow — **upload a face
+still (click or drag) → choose the action → Run**:
+Enroll (create identity) / Verify 1:1 / Identify 1:N / Liveness (PAD) /
+N:N cross-match, plus a registry card with GDPR forget and a compact API
+reference. Stills default to the research PAD-bypass (honest
+`pad_live: null`); a single "treat as live frames" switch re-enables the
+fail-closed rPPG gate.
 
 Equivalent scripted checks:
 
@@ -190,7 +194,7 @@ ABISGPT/
 |-- docs/
 |   |-- white_paper.md          # canonical white paper
 |   |-- ARCHITECTURE.md · BENCHMARKS.md · RESPONSIBLE-USE.md · api.md
-|   +-- TEST-REPORT.md          # latest run-of-record, incl. GPU results
+|   +-- TEST-REPORT.md          # latest run-of-record, incl. GPU + remote results
 |-- abisgpt/                    # the Python package (pip install -e .)
 |   |-- config.py               # dataclass config + YAML loader
 |   |-- encoder/                # hash strategy (CI) + torch strategy
@@ -203,8 +207,10 @@ ABISGPT/
 |-- scripts/                    # demo_synthetic · evaluate · train_encoder · api_smoke
 |   |-- prepare_dataset.py      # Olivetti (AT&T) download -> npz (`gitignore'd artifacts/)
 |   |-- train_olivetti.py       # real-face training: recall@1 0.9875 / EER 0.0014
+|   |-- ui_smoke.py             # API-level console e2e (11 checks, real faces)
+|   |-- e2e_ui.py               # Playwright real-browser e2e (12 checks + screenshots)
 |   +-- scale_test.py           # national-ID scale harness (25k..500k measured)
-+-- tests/                      # 34 tests (+2 live-container integration tests: Qdrant, Milvus)
++-- tests/                      # 39 tests (+2 live-container integration tests: Qdrant, Milvus)
 ```
 
 ## Feature Matrix

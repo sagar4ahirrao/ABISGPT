@@ -312,7 +312,7 @@ def dashboard():
     return _DASHBOARD_HTML
 
 
-_DASHBOARD_HTML = """<!doctype html>
+_DASHBOARD_HTML = r"""<!doctype html>
 <html><head><meta charset="utf-8"><title>ABISGPT Biometric Console</title>
 <style>
  :root{--bg:#0d1117;--card:#161b22;--fg:#e6edf3;--dim:#8b949e;--accent:#58a6ff;
@@ -388,7 +388,8 @@ Everything maps 1:1 to the HTTP API listed at the bottom.</p>
    <option value="pad">Liveness (PAD) — is this a live capture?</option>
    <option value="crossmatch">N:N cross-match — find duplicates</option>
   </select>
-  <input id="identity" placeholder="identity name…">
+  <input id="identity" placeholder="new identity, e.g. alice">
+  <select id="identity-sel" style="display:none"></select>
   <button class="go" id="run" disabled>Run</button>
  </div>
  <label class="live"><input type="checkbox" id="as-live">
@@ -452,15 +453,26 @@ const HINTS={enroll:'Enrolls the uploaded image as a NEW identity — then it ap
 function mode(){return $('mode').value;}
 function syncMode(){
   $('mode-hint').textContent=HINTS[mode()]||'';
-  const need=mode()==='enroll'||mode()==='verify';
-  $('identity').style.display=need?'':'none';
-  if(need&&mode()==='verify')fillSelect();
-  $('identity').placeholder=mode()==='enroll'
-    ?'new identity, e.g. alice':'claimed identity';
+  if(mode()==='enroll'){
+    $('identity').style.display='';
+    $('identity-sel').style.display='none';
+    $('identity').placeholder='new identity, e.g. alice';
+  }else if(mode()==='verify'){
+    $('identity').style.display='none';
+    $('identity-sel').style.display='';
+    fillSelect();
+  }else{
+    $('identity').style.display='none';
+    $('identity-sel').style.display='none';
+  }
 }
 $('mode').onchange=syncMode;syncMode();
 const GO={enroll:enroll,verify:doVerify,identify:doIdentify,pad:doPad,crossmatch:doCross};
-$('run').onclick=()=>GO[mode()]();
+$('run').onclick=()=>{
+  Promise.resolve(GO[mode()]()).catch(er=>{
+    console.error('[console-ui]', (er&&er.stack)||String(er));
+  });
+};
 
 /* ---------------- API calls ---------------- */
 const frames=()=>{ // single still replicated for template stability
@@ -479,7 +491,8 @@ async function enroll(){
   refresh();
 }
 async function doVerify(){
-  const id=$('identity').value.trim();
+  const id=mode()==='verify' ? $('identity-sel').value
+                             : $('identity').value.trim();
   if(!id||!PROBE)return null;
   $('result').innerHTML='<div class="meta">verifying '+id+'…</div>';
   const r=await jsonPost('/verify?identity_id='+encodeURIComponent(id)
@@ -491,7 +504,8 @@ async function doIdentify(){
   if(!PROBE)return null;
   $('result').innerHTML='<div class="meta">searching registry…</div>';
   const r=await jsonPost('/identify?pad='+padFlag(),{frames:frames()});
-  verdict(r,(r.decision==='match')?'MATCH ✔ — '+(r.identity_id||(r.top_hit&&r.identity_id))
+  const top=(r.candidates&&r.candidates[0]&&r.candidates[0].identity_id)||'none';
+  verdict(r,(r.decision==='match')?'MATCH ✔ — '+top
     :(r.decision==='rejected'?'REJECTED (PAD) ✘':'NO MATCH in registry'),r);
 }
 async function doPad(){
@@ -503,12 +517,12 @@ async function doPad(){
 }
 async function doCross(){
   $('result').innerHTML='<div class="meta">N:N cross-match…</div>';
-  const r=await fetch('/crossmatch?limit=64&threshold=0.9',{method:'POST'}).json();
-  const dups=(r.duplicates||r.matches||[]).map(d=>d.a+' ≡ '+d.b).join('\n')
-            ||'no duplicates found';
-  $('result').innerHTML='<div class="verdict '+(dups.startsWith('no')?'v-none':'v-match')
-    +'">'+(dups.startsWith('no')?'clean registry':'duplicate identities detected')
-    +'</div><div class="out">'+r.n_identities+' ids · '+dups+'</div>';
+  const r=await(await fetch('/crossmatch?limit=64&threshold=0.9',{method:'POST'})).json();
+  const dups=(r.duplicates||[]).map(d=>d.a+' ≡ '+d.b).join('\n');
+  const dupt=dups||'no duplicates found';
+  $('result').innerHTML='<div class="verdict '+(dups?'v-match':'v-none')
+    +'">'+(dups?'duplicate identities detected':'clean registry')
+    +'</div><div class="out">'+r.n_identities+' ids · '+dupt+'</div>';
 }
 function verdict(r,label,full){
   if(r.detail){$('result').innerHTML='<div class="verdict v-reject">error</div>'
@@ -549,12 +563,8 @@ async function forget(id){
   await fetch('/identities/'+id,{method:'DELETE'});refresh();
 }
 function fillSelect(){
-  if(mode()!=='verify')return;
-  const s=$('identity');
-  if(s.tagName!=='SELECT'||s[0]){
-    const sel=document.createElement('select');sel.id='identity';
-    s.replaceWith(sel);}
-  const sel=$('identity'),prev=sel.value;
+  const sel=$('identity-sel'),
+        prev=sel.value;
   sel.innerHTML=REG.map(i=>'<option>'+i+'</option>').join('');
   if(prev)sel.value=prev;
 }

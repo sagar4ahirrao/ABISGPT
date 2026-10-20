@@ -1,5 +1,35 @@
 # ABISGPT — Project Memory (local; kept in D:\GenAI\ABISGPT\.claude, gitignored)
 
+- UI UPLOAD BUG FIXED (Oct 20, user-reported "upload not working"):
+  ROOT = `_DASHBOARD_HTML` was a plain """ string → Python unescaped `\n`/`\'`
+  in the inlined JS → browser "Invalid or unexpected token" → ALL UI JS dead.
+  FIX = raw string r""" (graft_dashboard.py now emits r"""). Also fixed:
+  identity widget replaceWith(select) hack (2nd enroll impossible after
+  1 verify — now input#identity + select#identity-sel visibility-toggled);
+  doCross `await fetch(...).json()` promise-`-json` TypeError (double await);
+  identify label candidates[0].identity_id (was undefined).
+  scripts/e2e_ui.py = Playwright chromium REAL-browser e2e, 12/12 PASS,
+  screenshots artifacts/ui_shots/. Gate: node --check served JS via
+  artifacts/check_served_js.py. Graft pipeline unchanged (edit artifact →
+  graft → docker compose up -d --build api).
+- REMOTE GPU DONE (13.235.199.152:2222, pw in $env:ABISGPT_SSH_PW, venv
+  ~/fine-tuning/.venv + transformers 5.5.0 + cv2 5.0.0 + torch cu130):
+  (a) CLIP PAD native-res full CASIA-FASD → test AUC 0.7182 best-acc 0.7550
+  TPR@0.5 0.198 (attack-biased; ~860 img/s) — artifacts/remote/pad_clip_native.json;
+  (b) SOCOFing ArcFace fine-tune = NEGATIVE result: unseen-finger recall@1 0.01
+  EER 0.495; raw-pixel baseline ALSO chance (genuine 0.9462 ≈ impostor 0.9458)
+  → 64² crops 10 frames/finger carry no generalizable signal; documented in
+  TEST-REPORT §S.7.2. Scripts scripts/remote/{train_socofing,eval_pad_clip_native}.py;
+  remote side needs nothing else installed.
+  Remote gotchas: pgrep/pkill -f kills own ssh wrapper (kill by exact
+  venv path); ArcFace scatter_ inplace breaks autograd (use torch.where
+  one-hot); transformers 5 get_text_features may return output object not
+  tensor; remap identity labels to 0..K-1 before ArcFace head.
+- RESUME LIST: ① user pushes remaining commits (git push -u origin main)
+  ② optional iris larger set (gated) ③ dataset results table refresh in
+  README if user wants (CLIP numbers in TEST-REPORT §S.7).
+
+
 - Session Oct 20 2026 (OpCode/GLM): branch published to GitHub by user (manual push, no gh CLI). Commits: 7dc924d scaffold → 2fec1e3 VLM/training/API/Docker → 7cc8bcc match-layer+scale → fa41e59 wip Olivetti+Milvus.
 - USER-FACING RULES: all diagrams in repo docs/README must be Mermaid (no ASCII art); user requested agents/skills usage; memory lives in .claude folder of the repo; user pushes to GitHub manually.
 - REMOTE GPU (user offered): `ssh -p 2222 development@13.235.199.152` — ASK USER FOR PASSWORD when a heavy GPU run is needed (user enters it interactively); use for CLIP-224² CASIA full eval / fingerprint ArcFace fine-tune if user green-lights.
@@ -8,7 +38,7 @@
 - UI e2e: scripts/ui_smoke.py 11/11 PASS vs live container (real Olivetti face): enroll→verify 1.0→pad-bypass pad_live=null→fail-closed when gate on→identify rank1→N:N clean 0 dups→double-enroll detected 1.0→forget 200/404-after. Verify schema = {identity_id,is_match,score,pad_live,elapsed_ms}; identify = {decision,candidates[tier1_score,tier2_score],pad_live,elapsed_ms}; verify bypass → pad_live None (service.py override; honest marker). GDPR delete returns removed as INT count (1), not bool.
 - pytest 39 passed / 2 skipped after: test_verify_photo_mode_pad_bypass_honest_none + endpoints fixes (eval_pad_casia clip wrapper float(report), diag scripts lint, count filter OK, qdrant remove filter OK).
 - Stale-state caveat: container rebuild keeps Qdrant points but wipes in-memory _gallery — rerun ui_smoke may hit ghost-404½? No: enroll upserts; only crashed-interrupt leaves orphans → clean via DELETE before smoke.
-- RESUME LIST: ① commit this batch & user pushes ② optional: CLIP tier at 224² full CASIA on remote GPU (user must enter ssh password) ③ optional: fingerprint minutiae-encoder fine-tune on SOCOFing (needs CPU/remote) ④ README: dataset results table + UI section update ⑤ iris larger set (UniDataPro gated?) if user wants.
+- RESUME LIST (superseded — see top block): ② optional CLIP 224² CASIA on remote GPU → DONE ③ fingerprint fine-tune → DONE (negative) ④ README UI section + dataset results → DONE ⑤ iris larger set (UniDataPro gated?) if user wants.
 - Datasets: artifacts/dataset/olivetti.npz = sklearn fetch_olivetti_faces (figshare ndownloader.figshare.com/files/5976027, AT&T ORL, Samaria & Harter 1994; no auth). shapes (400,64,64,3) float32 [0,1]; labels 0-39 contiguous; names person_000-039; manifest JSON w/ sha256; sklearn cache at artifacts/data/sklearn for offline reuse. Prepare script scripts/prepare_dataset.py.
 - pad/liveness + iris + fingerprint: known sets gated (CelebA-Spoof, REPLAY-ATTACK, OULU-NPU, CASIA-SURF/-IrisV4, FVC2000) — no anonymous download; continue per honest synthetic-only PAD tests unless subagent finds ungated.
 - Encoder contract: vit_encoder.py _preprocess → np.uint8 H×W×3 or H×W (255, no resize); toy model ToyBiometricEncoder (trainer) any spatial, 3 channels REQUIRED, AdaptiveAvgPool2d(1); strategy="hash" bypasses preprocess — SHA256 of RAW array bytes (uint8 implied). ViTBiometricEncoder strategy "torch" = timm DINOv2 lazy load 350 MB (works, evaluated).
