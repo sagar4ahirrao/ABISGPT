@@ -55,12 +55,11 @@ IRIS_BASE_URL = (
 
 FP_SUBJECTS = 100  # subjects ingested -> 10 finger frames each
 FP_MAX_FRAMES = 1000
-IRIS_SIZE = (256, 256)  # native ~ megapixel; shrink first for speed, then 64x64
 
 
 def _download(url: str, dest: Path) -> None:
     dest.parent.mkdir(parents=True, exist_ok=True)
-    tmp = dest.with_suffix(dest.suffix + ".part")
+    tmp = Path(str(dest) + ".part")
     print(f"download {url} -> {dest}")
     with urllib.request.urlopen(url, timeout=120) as r, open(tmp, "wb") as f:
         while True:
@@ -68,7 +67,10 @@ def _download(url: str, dest: Path) -> None:
             if not chunk:
                 break
             f.write(chunk)
-    tmp.rename(dest)
+    if tmp.exists():
+        tmp.replace(dest)
+    else:
+        tmp.rename(dest)
 
 
 def _to_frames(np_stack) -> np.ndarray:
@@ -128,7 +130,7 @@ def prepare_fingerprint(force: bool) -> None:
                 subject, _, rest = fname.split("/")[-1].partition("__")
                 subj_names.append(f"subject_{subject}_{rest.lower()}")
                 seen += 1
-        frames = np.stack(images).repeat(3, axis=-1).astype(np.float32)
+        frames = np.stack(images)[:, :, :, None].repeat(3, axis=3).astype(np.float32)
         # shuffle rows deterministically while keeping labels aligned
         rng = np.random.RandomState(42)
         order = rng.permutation(len(frames))

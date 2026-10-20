@@ -112,21 +112,30 @@ class TwoTierPipeline:
     # ------------------------------------------------------------------ #
     # Identification
     # ------------------------------------------------------------------ #
-    def identify(self, frames: Sequence[np.ndarray], top_k: int | None = None) -> IdentificationResult:
-        """Run PAD gate -> 512-D encode -> Tier-1 triage -> Tier-2 rerank."""
+    def identify(self, frames: Sequence[np.ndarray], top_k: int | None = None,
+                 pad: bool = True) -> IdentificationResult:
+        """Run PAD gate -> 512-D encode -> Tier-1 triage -> Tier-2 rerank.
+
+        `pad=False` is the research/photo path for still captures that
+        cannot carry a pulse: the gate is skipped (documented in the
+        result as `pad_live=None`) — never silently rejected.
+        """
         top_k = top_k or self.config.pipeline.top_k
         t_start = time.perf_counter()
 
         # ---- Gate 0: passive PAD (fail-closed) --------------------------- #
-        pad_verdict = self.pad.evaluate(frames)
-        if not pad_verdict.is_live:
-            return IdentificationResult(
-                query_id="probe",
-                decision="rejected",
-                pad_live=False,
-                pad_scores=pad_verdict.tier_scores,
-                elapsed_ms=(time.perf_counter() - t_start) * 1000,
-            )
+        pad_scores: dict[str, float] = {}
+        if pad:
+            pad_verdict = self.pad.evaluate(frames)
+            pad_scores = pad_verdict.tier_scores
+            if not pad_verdict.is_live:
+                return IdentificationResult(
+                    query_id="probe",
+                    decision="rejected",
+                    pad_live=False,
+                    pad_scores=pad_verdict.tier_scores,
+                    elapsed_ms=(time.perf_counter() - t_start) * 1000,
+                )
 
         # ---- Encode: multi-frame template averaging (same as enrollment) -- #
         if not frames:
@@ -158,8 +167,8 @@ class TwoTierPipeline:
         return IdentificationResult(
             query_id="probe",
             decision=decision,
-            pad_live=True,
-            pad_scores=pad_verdict.tier_scores,
+            pad_live=pad_verdict.is_live if pad else None,
+            pad_scores=pad_scores,
             candidates=candidates,
             tier1_hit_ms=tier1_ms,
             tier2_rerank_ms=tier2_ms,
@@ -173,6 +182,14 @@ class TwoTierPipeline:
         """GDPR Art. 17 right-to-erasure hook: remove from both tiers."""
         self._gallery.pop(identity_id, None)
         return self.index.remove([identity_id])
+
+    def identities(self) -> list[str]:
+        """Enrolled identity ids (registry listing)."""
+        return sorted(self._gallery)
+
+    def template(self, identity_id: str) -> np.ndarray:
+        """The stored L2-normalized template (`KeyError` when unknown)."""
+        return self._gallery[identity_id]
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"TwoTierPipeline(index={type(self.index).__name__}, enrolled={len(self)})"

@@ -140,3 +140,43 @@ def test_verify_1v1_endpoint_audio():
         assert body["score"] == 0.0 and not body["is_match"]
     assert "elapsed_ms" in body
 
+
+def test_identities_listing_and_nn_dedup_endpoint():
+    svc.reset_pipeline()
+    client = TestClient(svc.app)
+    for i, seed in enumerate((11, 12, 13)):
+        client.post("/enroll", json={"identity_id": f"person_{i}",
+                                     "frames": _make_frames(seed=seed)})
+    r = client.get("/identities")
+    assert r.status_code == 200
+    assert {"person_0", "person_1", "person_2"} <= set(r.json()["identities"])
+
+    # N:N dedup over 3 distinct synthetic persons -> no near-duplicate pairs
+    r = client.post("/crossmatch", params={"limit": 16, "threshold": 0.9})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["n_identities"] == 3
+    assert body["n_duplicates"] == 0
+    assert body["pairs_scored"] == 9          # 3 x 3 full matrix (self excluded)
+    assert "pairs_per_sec" in body
+
+
+def test_identify_photo_mode_pad_bypass():
+    """pad=false path (still photo/scans): gate skipped, honest pad_live=None."""
+    svc.reset_pipeline()
+    client = TestClient(svc.app)
+    client.post("/enroll", json={"identity_id": "photo_id",
+                                 "frames": _make_frames(seed=21)})
+    frames = _make_frames(seed=21)            # same content -> would match
+    # with the gate active, 12 pulse-less frames are fail-closed rejected:
+    r_gated = client.post("/identify", json={"frames": frames})
+    assert r_gated.json()["decision"] == "rejected"
+    assert r_gated.json()["pad_live"] is False
+    # research bypass skips the gate (documented None), matching proceeds:
+    r = client.post("/identify", params={"pad": "false"}, json={"frames": frames})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["pad_live"] is None
+    assert body["decision"] in {"match", "no_match"}
+    assert body["candidates"], "bypassed identify must still rank candidates"
+
