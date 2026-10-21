@@ -26,9 +26,18 @@ data/
 *.h5
 embeddings/
 exports/
+# exception for the shipped toy-CNN ONNX (see artifacts/ section below)
+!artifacts/encoder/face_encoder.onnx
 
 # Demo outputs
 artifacts/
+# Exception: the 487 KB ONNX export of the toy CNN is a build artifact, not
+# personal data — required by the API image (Dockerfile COPY) and the
+# Android on-device flow.
+!artifacts/
+artifacts/*
+!artifacts/encoder/
+!artifacts/encoder/face_encoder.onnx
 runs/
 outputs/
 *.mp4

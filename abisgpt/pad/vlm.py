@@ -69,7 +69,9 @@ class ClipVlmPad:
         arr = np.asarray(image)
         if arr.dtype.kind == "f":                     # float inputs: gray-levels
             arr = np.clip(arr, 0.0, 255.0)
-            if arr.max() <= 1.5:                      # 0..1 float convention
+            # only TRUE 0..1 frames are upscaled (non-negative, peak <= 1.5);
+            # out-of-range synthetic captures stay at native scale.
+            if float(arr.min()) >= -1e-6 and float(arr.max()) <= 1.5:
                 arr = arr * 255.0
             arr = arr.astype(np.uint8)
         img = self._PILImage.fromarray(arr).convert("RGB")
@@ -93,11 +95,30 @@ class HeuristicVlmPad:
 
     Mills high-frequency artifact energy (moire/banding) against a live
     margin. Actually a crude LCD/blob detector — production must use CLIP.
+
+    Calibration (measured at the console's canonical 32x32, 0..255 scale):
+      real captures        attack_energy 0.813 – 0.977
+        (Olivetti + CASIA-FASD faces <= 0.960, fingerprints <= 0.958,
+         iris <= 0.977)
+      synthetic screen texture / noise / moire    >= 0.993
+    Frames are FIRST normalized from the 0..1 float convention (console
+    posts float, bench may post uint8) so the tier is scale-consistent;
+    then scores outside the [LO, HI] band map linearly to [0, 1] with
+    captures at/below LO fully live and saturated screen textures fully
+    dead.
     """
 
-    def __init__(self, scale: float = 6.0, tau: float = 3.0):
+    # measured bounds (see docstring); resolution-sensitive by design —
+    # recalibrate if the console frame size changes.
+    LO = 0.975   # <= this fraction of pixels with |lap|>4  -> fully live
+    HI = 0.995   # >= this fraction (saturated screen texture) -> fully dead
+
+    def __init__(self, scale: float = 6.0, tau: float = 3.0,
+                 lo: float | None = None, hi: float | None = None):
         self.scale = scale
         self.tau = tau
+        self.lo = self.LO if lo is None else lo
+        self.hi = self.HI if hi is None else hi
 
     def score(self, image) -> VlmReport:
         import cv2
@@ -106,11 +127,31 @@ class HeuristicVlmPad:
         gray = np.asarray(image, dtype=np.float32)
         if gray.ndim == 3:
             gray = gray.mean(axis=2)
+        # Canonical 0..255 scale: the tau/LO/HI thresholds are calibrated
+        # there. Only TRUE 0..1 frames (non-negative peak <= 1.5) are
+        # upscaled — frames carrying out-of-range values (e.g. synthetic
+        # captures with an absolute pulse amplitude) stay at native scale,
+        # otherwise the ×255 would blow non-image noise into fake banding.
+        peak = float(gray.max()) if gray.size else 0.0
+        if peak <= 1.5 and float(gray.min()) >= -1e-6:
+            gray = gray * 255.0
+        # Canonical SIZE: Laplacian pixel-density grows with resolution, so
+        # resample to the console's canonical 32x32 first — the tier must
+        # give the same verdict for the same capture at any input size.
+        if gray.shape != (32, 32):
+            gray = cv2.resize(gray, (32, 32),
+                              interpolation=cv2.INTER_AREA)
         # Laplacian > threshold highlights cd/moire banding energy
         lap = cv2.Laplacian(gray, cv2.CV_32F, ksize=3)
         attack_energy = float((np.abs(lap) > 4.0).mean())
-        liveness = float(np.clip(1.0 - attack_energy * 6.0, 0.0, 1.0))
-        return VlmReport(liveness_score=liveness, top_spoof_anchor="high-frequency artifact" if attack_energy > 0.05 else None, margin=float(-attack_energy))
+        if attack_energy <= self.lo:
+            liveness = 1.0
+        elif attack_energy >= self.hi:
+            liveness = 0.0
+        else:
+            liveness = float(1.0 - (attack_energy - self.lo)
+                             / max(self.hi - self.lo, 1e-9))
+        return VlmReport(liveness_score=liveness, top_spoof_anchor="high-frequency artifact" if attack_energy > self.hi else None, margin=float(-attack_energy))
 
     def __call__(self, image) -> float:
         """Fusion-contract adapter: callable(frame) -> float in [0, 1]."""

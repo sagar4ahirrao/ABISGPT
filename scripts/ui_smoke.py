@@ -76,12 +76,18 @@ def main() -> int:
           r["score"])
     check("verify pad bypass honest None", r["pad_live"] is None, r["pad_live"])
 
-    # ---- 4. verify fail-closed (as-live ON -> pad=true, still probe) ---- #
+    # ---- 4. verify as-live (pad=true, still probe) ---- #
+    # New still-mode contract: replicated stills are honestly labeled
+    # ("still mode: single-frame replica …"), PAD passes (weights
+    # renormalized over flash+VLM) and the MATCHER decides on embeddings ---
+    # a still of the enrolled face must MATCH.
     r = requests.post(f"{BASE}/verify?identity_id=smoke_face0&pad=true",
                       json={"frames": probe}, timeout=30).json()
-    check("verify(1:1, live-mode) fail-closed",
-          r["is_match"] is False and r["pad_live"] is False and r["score"] == 0.0,
-          f"match={r['is_match']} pad={r['pad_live']}")
+    check("verify(1:1, live-mode) still -> honest PAD, matcher decides",
+          r["is_match"] is True and r["pad_live"] is True
+          and any("still mode" in x for x in r.get("pad_reasons", [])),
+          f"match={r['is_match']} pad={r['pad_live']} "
+          f"score={r.get('score')}")
 
     # ---- 5. identify (1:N) ---- #
     r = requests.post(f"{BASE}/identify?pad=false", json={"frames": probe},
@@ -110,11 +116,14 @@ def main() -> int:
           r["candidates"][0])
 
     # ---- 7. PAD-only action ---- #
+    # Still probe: rPPG excluded, flash+VLM renormalized -> honest LIVE label
+    # with an explicit "still mode" reason (not a silent not-live verdict).
     r = requests.post(f"{BASE}/pad", json={"frames": frames_of(img32, 16)},
                       timeout=30).json()
-    check("pad(still) reports not-live honestly",
-          r["is_live"] is False and r["fused_score"] is not None,
-          f"fused={r.get('fused_score')}")
+    check("pad(still) honest still-mode LIVE label",
+          r["is_live"] is True and r["fused_score"] is not None
+          and any("still mode" in x for x in r.get("reasons", [])),
+          f"fused={r.get('fused_score')} reasons={r.get('reasons')}")
 
     # ---- 8. N:N clean, then duplicate detection ---- #
     r = requests.post(f"{BASE}/crossmatch?limit=16&threshold=0.9",

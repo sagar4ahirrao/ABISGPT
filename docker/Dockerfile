@@ -1,6 +1,7 @@
-# OpenABIS reference API image — deliberately torch-free.
-# The hash encoder + rPPG/flash PAD tiers need only numpy/opencv/faiss;
-# the full torch encoder path is opt-in via the host training workflow.
+# Reference API image: real biometric matching via ONNXRuntime.
+# A 487 KB ONNX export of the trained toy CNN (see
+# scripts/export_encoder_onnx.py) replaces the byte-only hash encoder;
+# torch stays out, rPPG/flash PAD tiers need only numpy/opencv/faiss.
 FROM python:3.10-slim
 
 ENV PYTHONUNBUFFERED=1 \
@@ -13,6 +14,7 @@ WORKDIR /app
 COPY pyproject.toml README.md ./
 COPY abisgpt ./abisgpt
 COPY configs ./configs
+COPY artifacts/encoder/face_encoder.onnx /app/artifacts/encoder/face_encoder.onnx
 
 RUN pip install --no-cache-dir -e . --no-deps
 

@@ -13,7 +13,7 @@ from abisgpt.config import PadConfig
 @dataclass
 class PadVerdict:
     is_live: bool
-    fused_score: float
+    fused_score: float | None        # None: no measurable tier (honest N/A)
     tier_scores: dict[str, float]
     reasons: list[str]
 
@@ -46,20 +46,31 @@ class PassivePadEngine:
         # ---- Tier 1: rPPG ------------------------------------------------ #
         from abisgpt.pad.rppg import RppgAnalyzer
 
-        rppg = RppgAnalyzer(
-            fps=float(self.cfg.fps),
-            band_hz=tuple(self.cfg.deepfake_band),
-            min_frames=max(8, int(self.cfg.fps * 0.4)),
-        )
-        result = rppg.from_frames(frames)
-        # Margin-based mapping: noise floor (≈0 dB) → 0, strong pulse (~20 dB) → 1
-        rppg_signal = float(np.clip((result.snr_db - 5.0) / 15.0, 0.0, 1.0))
-        tier_scores["rppg"] = rppg_signal
-        if not result.is_live:
+        # A still — a single frame OR one frame replicated F times — carries
+        # NO temporal signal; a pulse absence on it is not attack evidence.
+        # Exclude the pulse tier and renormalize over the tiers that are
+        # measurable from a still (flash surface energy + VLM semantics).
+        still_mode = self._is_still_replica(frames) or len(frames) < 2
+        if still_mode:
             reasons.append(
-                f"rPPG rejected: snr={result.snr_db:.2f} dB"
-                + (f", bpm={result.bpm:.1f}" if result.bpm else "")
+                "still mode: single-frame or replicated still — rPPG needs"
+                " temporal frames (12+ live capture) and is excluded from"
+                " this fusion")
+        else:
+            rppg = RppgAnalyzer(
+                fps=float(self.cfg.fps),
+                band_hz=tuple(self.cfg.deepfake_band),
+                min_frames=max(8, int(self.cfg.fps * 0.4)),
             )
+            result = rppg.from_frames(frames)
+            # Margin-based mapping: noise floor (≈0 dB) → 0, strong pulse (~20 dB) → 1
+            tier_scores["rppg"] = float(
+                np.clip((result.snr_db - 5.0) / 15.0, 0.0, 1.0))
+            if not result.is_live:
+                reasons.append(
+                    f"rPPG rejected: snr={result.snr_db:.2f} dB"
+                    + (f", bpm={result.bpm:.1f}" if result.bpm else "")
+                )
 
         # ---- Tier 2: flash surface diffusion ------------------------------ #
         try:
@@ -83,6 +94,18 @@ class PassivePadEngine:
         if "flash" not in tier_scores:
             reasons.append("PAD fusion degraded: flash tier absent")
 
+        # A truly single-frame still also defeats the flash tier (diffusion
+        # needs >=2 frames). With NO measurable tier at all, liveness is
+        # UNPROVEN — never assert "spoof" from absent evidence; the gate
+        # passes and biometric matching still decides. The explicit reason
+        # string keeps the audit trail honest.
+        if still_mode and not tier_scores:
+            reasons.append(
+                "still mode: no measurable tier on a single still — liveness"
+                " unproven (not asserted spoof); biometric matching decides")
+            return PadVerdict(is_live=True, fused_score=None,
+                              tier_scores={}, reasons=reasons)
+
         fused = self._weighted_fusion(tier_scores)
         is_live = fused >= self.cfg.gate_threshold
         if is_live:
@@ -95,6 +118,18 @@ class PassivePadEngine:
         )
 
     __call__ = evaluate
+
+    @staticmethod
+    def _is_still_replica(frames) -> bool:
+        """True when every frame is byte-identical to the first (an uploaded
+        still replicated by the console, not a live multi-frame capture).
+        Compares cheap hashes — the first frame's exact bytes are the
+        reference; any different frame breaks the replica assumption."""
+        if len(frames) < 2:
+            return False
+        base = np.ascontiguousarray(np.asarray(frames[0])).tobytes()
+        return all(np.ascontiguousarray(np.asarray(f)).tobytes() == base
+                   for f in frames[1:])
 
     def _weighted_fusion(self, scores: dict[str, float]) -> float:
         available = {k: v for k, v in scores.items() if v is not None}

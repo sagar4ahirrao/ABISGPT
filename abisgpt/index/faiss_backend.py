@@ -27,6 +27,18 @@ class FaissIndex(VectorIndex):
     Composition:
       * Coarse quantizer   = `IndexHNSWFlat` (graph-based IVF allocation),
       * Fine residual code = `IndexIVFPQ` with `pq_segments` × `pq_bits` code.
+
+    GPU vector search (`config.use_gpu=True` / env `ABISGPT_INDEX_GPU=1`,
+    `pip install abisgpt[gpu]`): the trained IVFPQ index is transparently
+    moved to the CUDA device via `index_cpu_to_gpu` and every search runs
+    on-GPU. With no CUDA device / missing wheel the constructor falls back
+    to CPU execution and records `gpu="unavailable"` — behaviour is
+    identical either way.
+
+    NOTE: stored vectors are PQ *codes* — `items()` deliberately stays
+    unimplemented (default `NotImplementedError`) because reconstruction
+    would yield approximate templates; Tier-2 precision must not silently
+    degrade to approximations on gallery restore.
     """
 
     def __init__(self, config: IndexConfig | None = None):
@@ -36,19 +48,38 @@ class FaissIndex(VectorIndex):
         faiss = _ensure_faiss()
         d = config.dim
         m = int(min(config.m, d - 1))  # HNSW M must be < dim
-        self._coarse = faiss.IndexHNSWFlat(d, m, faiss.METRIC_INNER_PRODUCT)
-        self._coarse.hnsw.efConstruction = config.ef_construction
-        self._coarse.hnsw.efSearch = config.ef_search
-
-        self._index = faiss.IndexIVFPQ(
-            self._coarse,
+        coarse = faiss.IndexHNSWFlat(d, m, faiss.METRIC_INNER_PRODUCT)
+        coarse.hnsw.efConstruction = config.ef_construction
+        self._cpu_index = faiss.IndexIVFPQ(
+            coarse,
             d,
             config.nlist,
             config.pq_segments,
             config.pq_bits,
             faiss.METRIC_INNER_PRODUCT,
         )
+        self._cpu_index.nprobe = config.nprobe
+        # GPU transparently hosts the IVFPQ index; CPU fallback otherwise.
+        self.gpu: str = "off"
+        self._resources = None
+        if config.use_gpu:
+            if hasattr(faiss, "StandardGpuResources") and hasattr(
+                    faiss, "index_cpu_to_gpu"):
+                try:
+                    self._resources = faiss.StandardGpuResources()
+                    self._index = faiss.index_cpu_to_gpu(
+                        self._resources, 0, self._cpu_index)
+                    self.gpu = "cuda"
+                except RuntimeError:    # no CUDA device on this host
+                    self._index = self._cpu_index
+                    self.gpu = "unavailable"
+            else:
+                self._index = self._cpu_index
+                self.gpu = "unavailable"
+        else:
+            self._index = self._cpu_index
         self._index.nprobe = config.nprobe
+        self._hnsw = coarse                     # live efSearch re-tune handle
         self._ids: list[str] = []
         self._uid_set: set[str] = set()
 
@@ -96,7 +127,11 @@ class FaissIndex(VectorIndex):
     # ------------------------------------------------------------------ #
     def search(self, query: np.ndarray, top_k: int = 10) -> list[tuple[str, float]]:
         q = self._sanitize(query)
-        self._coarse.hnsw.efSearch = self.config.ef_search  # live re-tune support
+        try:
+            self._hnsw.hnsw.efSearch = self.config.ef_search  # live re-tune
+        except AttributeError:      # quantizer swapped under the GPU host
+            pass
+        self._index.nprobe = self.config.nprobe
         sims, idx = self._index.search(q, top_k)
         hits: list[tuple[str, float]] = []
         for pos, sim in zip(idx[0], sims[0], strict=False):

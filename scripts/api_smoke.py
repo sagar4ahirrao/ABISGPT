@@ -25,8 +25,13 @@ HR_HZ = 1.0
 
 
 def gen_frames(rng: np.random.Generator, base: float) -> list:
-    """`N_FRAMES` 32x32 RGB captures whose green channel carries a 1.2 Hz BVP,
-    mirroring demo_synthetic.py (2.5 gray levels ≈ 72 bpm)."""
+    """`N_FRAMES` 32x32 RGB captures whose green channel carries a 1 Hz BVP.
+
+    `base` is in 0..255 gray levels (demo_synthetic.py convention: base 120
+    + a ±2.5-level pulse). Frames are POSTED in the service's 0..1 float
+    convention — pulse amplitude stays valid either way, and never drives
+    values out of range (an out-of-range frame made the VLM tier mis-score
+    real captures as spoof; see tests/test_vlm.py)."""
     frames = []
     for f in range(N_FRAMES):
         pulse = 2.5 * np.sin(2 * np.pi * HR_HZ * f / FPS)
@@ -34,7 +39,7 @@ def gen_frames(rng: np.random.Generator, base: float) -> list:
         img[:, :, 1] += pulse + rng.normal(0, 0.6, (32, 32))
         img[:, :, 0] += rng.normal(0, 0.3, (32, 32))
         img[:, :, 2] += rng.normal(0, 0.3, (32, 32))
-        frames.append(img.round(3).tolist())
+        frames.append((img / 255.0).round(4).tolist())
     return frames
 
 
@@ -55,10 +60,12 @@ def main(base_url: str) -> int:
     status, health = call("GET", f"{base_url}/health")
     print(f"GET  /health        -> {status} {health}")
     ok &= status == 200 and health["status"] == "ok"
+    enrolled_before = health["enrolled"]
 
     # Enroll two identities (different base intensity = distinct templates).
-    tom_frames = gen_frames(np.random.default_rng(11), base=0.50)
-    jane_frames = gen_frames(np.random.default_rng(12), base=0.65)
+    # Bases are 0..255 gray levels (see gen_frames docstring).
+    tom_frames = gen_frames(np.random.default_rng(11), base=120)
+    jane_frames = gen_frames(np.random.default_rng(12), base=155)
     status, body = call("POST", f"{base_url}/enroll",
                         {"identity_id": "tom", "frames": tom_frames})
     print(f"POST /enroll tom    -> {status} {body}")
@@ -85,7 +92,7 @@ def main(base_url: str) -> int:
     flat = [np.full((32, 32, 3), 0.55, dtype=np.float32).tolist()] * N_FRAMES
     status, body = call("POST", f"{base_url}/pad", {"frames": flat})
     print(f"POST /pad flat      -> {status} is_live={body['is_live']} "
-          f"fused={body['fused_score']:.2f} tiers={body['tier_scores']}")
+          f"fused={body['fused_score']} tiers={body['tier_scores']}")
 
     # GDPR erasure hook.
     for name, expect in (("tom", 200), ("ghost", 404)):
@@ -95,8 +102,10 @@ def main(base_url: str) -> int:
     call("DELETE", f"{base_url}/identities/jane")   # leave the store empty
 
     status, health = call("GET", f"{base_url}/health")
-    ok &= status == 200 and health["enrolled"] == 0    # fully erased afterwards
-    print(f"GET  /health        -> {health}")
+    # Post-condition: the store has exactly what it started with (this smoke
+    # creates tom + jane and deletes both). Works on clean AND dirty stores.
+    ok &= status == 200 and health["enrolled"] == enrolled_before
+    print(f"GET  /health        -> {health} (expected {enrolled_before})")
 
     print("SMOKE:", "PASS" if ok else "FAIL")
     return 0 if ok else 1

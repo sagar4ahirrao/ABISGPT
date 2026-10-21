@@ -19,6 +19,7 @@ from __future__ import annotations
 import os
 import threading
 import time
+from pathlib import Path
 
 import numpy as np
 from fastapi import FastAPI, HTTPException
@@ -70,11 +71,23 @@ def get_pipeline() -> TwoTierPipeline:
         backend = os.environ.get("ABISGPT_INDEX_BACKEND", "").strip().lower()
         if backend:
             cfg.index.backend = backend            # type: ignore[assignment]
+        if os.environ.get("ABISGPT_INDEX_GPU", "").strip().lower() in {
+                "1", "true", "yes"}:
+            cfg.index.use_gpu = True               # faiss GPU vector search
         uri = os.environ.get("ABISGPT_INDEX_URI", "").strip()
         if uri:
             cfg.index.uri = uri
 
-        encoder = ViTBiometricEncoder(strategy="hash")
+        # Encoder: real biometric matching needs the trained ONNX toy CNN
+        # (487 KB, onnxruntime CPU). Fallback: hash (byte-equality only —
+        # 1:1/1:N "work" solely for the exact same uploaded image).
+        enc_choice = os.environ.get("ABISGPT_ENCODER", "").strip().lower()
+        if not enc_choice:
+            enc_choice = ("onnx" if Path(
+                os.environ.get("ABISGPT_ENCODER_ONNX",
+                               "artifacts/encoder/face_encoder.onnx")).exists()
+                          else "hash")
+        encoder = ViTBiometricEncoder(strategy=enc_choice)
         pad = PassivePadEngine(cfg.pad, vlm_scorer=_make_vlm_scorer())
         backend_obj = build_backend(cfg.index)
         _PIPE = TwoTierPipeline(encoder=encoder, pad=pad, index_backend=backend_obj, config=cfg)
@@ -203,12 +216,17 @@ _BENCH = {"running": False, "status": "idle", "metrics": None, "error": None}
 
 
 def _clean_probe(n_frames: int, base: float, rng: np.random.Generator) -> list:
-    """Pulse-carrying synthetic live capture (on-bin 1.0 Hz BVP)."""
+    """Pulse-carrying synthetic live capture (on-bin 1.0 Hz BVP).
+
+    `base` is a 0..255 gray level (demo_synthetic.py convention); frames
+    are returned in the service's 0..1 float convention so pulse amplitude
+    never drives pixel values out of range (out-of-range frames made the
+    VLM tier mis-score real captures as spoof)."""
     frames = []
     for f in range(n_frames):
         img = np.full((32, 32, 3), base, dtype=np.float32)
         img[:, :, 1] += 2.5 * np.sin(2 * np.pi * 1.0 * f / 60.0) + rng.normal(0, 0.6, (32, 32))
-        frames.append(img.round(3).tolist())
+        frames.append((img / 255.0).round(4).tolist())
     return frames
 
 

@@ -72,8 +72,12 @@ class PrecisionVerifier:
         ref = self.gallery.get(identity_id)
         if ref is None:
             return 0.0
-        q = query / max(float(np.linalg.norm(query)), 1e-9)
-        r = ref / max(float(np.linalg.norm(ref)), 1e-9)
+        q = np.asarray(query, np.float32).reshape(-1)
+        r = np.asarray(ref, np.float32).reshape(-1)
+        if q.shape != r.shape:
+            return 0.0
+        q = q / max(float(np.linalg.norm(q)), 1e-9)
+        r = r / max(float(np.linalg.norm(r)), 1e-9)
         return float(np.dot(q, r))
 
 
@@ -90,8 +94,20 @@ class TwoTierPipeline:
         self.config = config or AbisGptConfig()
         self.encoder = encoder or ViTBiometricEncoder(strategy="hash")
         self.pad = pad or PassivePadEngine(self.config.pad)
-        self.index = index_backend or build_backend(self.config.index)
+        # NOTE: not `or`-truthiness — an explicitly-passed empty index has
+        # __len__()==0 and would be silently replaced by build_backend().
+        self.index = (index_backend if index_backend is not None
+                      else build_backend(self.config.index))
         self._gallery: dict[str, np.ndarray] = {}
+        # Restore the exact Tier-2 gallery from the backend snapshot when it
+        # supports precise iteration (BruteForce / Qdrant). Keeps the registry
+        # consistent across service restarts; backends that cannot iterate
+        # exactly (Faiss PQ codes) degrade to an empty in-memory gallery.
+        try:
+            for uid, emb in self.index.items():
+                self._gallery.setdefault(uid, emb)
+        except NotImplementedError:
+            pass
         self.verifier = PrecisionVerifier(self._gallery)
 
     # ------------------------------------------------------------------ #

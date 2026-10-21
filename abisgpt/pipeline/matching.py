@@ -43,6 +43,7 @@ class VerifyResult:
     score: float
     pad_live: bool
     elapsed_ms: float
+    pad_reasons: list[str] | None = None   # honest "why" from the PAD gate
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -146,9 +147,17 @@ class MatchingEngine:
         t0 = time.perf_counter()
         if pad:
             verdict = self.pipeline.pad.evaluate(frames)
+            reasons = list(verdict.as_dict().get("reasons") or [])
             if not verdict.is_live:
                 return VerifyResult(identity_id, False, 0.0, False,
-                                    (time.perf_counter() - t0) * 1000)
+                                    (time.perf_counter() - t0) * 1000,
+                                    pad_reasons=reasons)
+            emb = self.pipeline.encode(frames)
+            score = self.pipeline.verifier.score(emb, identity_id)
+            return VerifyResult(identity_id, bool(score >= self.threshold),
+                                float(score), True,
+                                (time.perf_counter() - t0) * 1000,
+                                pad_reasons=reasons)
         emb = self.pipeline.encode(frames)
         score = self.pipeline.verifier.score(emb, identity_id)
         return VerifyResult(identity_id, bool(score >= self.threshold), float(score),

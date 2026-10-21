@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable  # noqa: E402
+
 import numpy as np
 
 from abisgpt.config import IndexBackend, IndexConfig
@@ -56,6 +58,10 @@ class BruteForceIndex(VectorIndex):
             self._ids = [uid for _, uid in keep]
         return dropped
 
+    def items(self) -> Iterable[tuple[str, np.ndarray]]:
+        for uid, row in zip(self._ids, self._mat, strict=False):
+            yield uid, row.copy()
+
     def __len__(self) -> int:
         return len(self._ids)
 
@@ -74,6 +80,15 @@ def build_backend(config: IndexConfig | None = None) -> VectorIndex:
         try:
             from abisgpt.index.faiss_backend import FaissIndex
 
+            return FaissIndex(config)
+        except ImportError:
+            return BruteForceIndex(dim=config.dim)
+
+    if backend == "faiss-gpu":
+        try:
+            from abisgpt.index.faiss_backend import FaissIndex
+
+            config.use_gpu = True
             return FaissIndex(config)
         except ImportError:
             return BruteForceIndex(dim=config.dim)

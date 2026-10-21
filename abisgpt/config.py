@@ -9,7 +9,7 @@ from typing import Any, Literal
 
 import yaml
 
-IndexBackend = Literal["faiss", "qdrant", "milvus"]
+IndexBackend = Literal["faiss", "faiss-gpu", "qdrant", "milvus"]
 
 
 @dataclass
@@ -31,6 +31,7 @@ class IndexConfig:
     pq_bits: int = 8            # bits per segment code (256 centroids)
     metric: Literal["cosine", "l2", "inner_product"] = "cosine"
     uri: str = "http://localhost:19530"  # qdrant/milvus endpoint
+    use_gpu: bool = False       # faiss GPU (vector search on GPU servers)
 
     def validate(self) -> None:
         if self.dim % self.pq_segments != 0:
@@ -61,7 +62,13 @@ class PipelineConfig:
     """Two-tier triage policy (white paper §1.3)."""
 
     top_k: int = 10
-    match_threshold: float = 0.72
+    # Calibrated (Oct 2026) on the shipped toy-CNN + ONNX encoder over
+    # Olivetti 1:1 probes: genuine single-frame pairs sit at cosine
+    # ~0.59-0.84, different-person pairs at ~0.20-0.35; the previous
+    # 0.72 (ArcFace-style) default rejected most genuine different-photo
+    # probes (see artifacts/bench_matcher.json ROC). Production ArcFace
+    # swap should re-calibrate upward.
+    match_threshold: float = 0.50
     batch_size: int = 32
     device: str = "auto"
 

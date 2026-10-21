@@ -31,6 +31,12 @@ class VectorIndex(ABC):
     def remove(self, ids: Iterable[str]) -> int:
         """Delete ids, return how many were actually dropped."""
 
+    def items(self) -> Iterable[tuple[str, np.ndarray]]:
+        """Iterate all stored (id, embedding) pairs. Backends that cannot
+        iterate (or would be prohibitively slow) raise NotImplementedError —
+        callers must degrade gracefully (empty restored gallery)."""
+        raise NotImplementedError
+
     @abstractmethod
     def __len__(self) -> int: ...
 

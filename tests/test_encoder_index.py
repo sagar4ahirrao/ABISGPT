@@ -97,6 +97,45 @@ def test_faiss_backend_matches_oracle_top1() -> None:
     assert same_identity[0][1] > 0.9, f"same-identity similarity too low: {same_identity[0]}"
 
 
+def test_faiss_gpu_flag_cpu_fallback_on_no_cuda() -> None:
+    """use_gpu=True MUST keep identical behaviour when no CUDA device exists
+    (vector search hosts CPU-only CI boxes and laptops): the index resolves,
+    gpu status is recorded honestly, and search still matches oracle."""
+    cfg = IndexConfig(backend="faiss", nlist=64, nprobe=16, pq_segments=8,
+                      pq_bits=4, use_gpu=True)     # small PQ: cheap training
+    cfg.validate()
+    backend = build_backend(cfg)
+    assert backend.gpu in {"cuda", "unavailable", "off"}
+    vecs, uids = clustered_gallery(n=2600)
+    backend.add(uids, vecs)
+    hits = backend.search(vecs[0], top_k=5)
+    assert hits, "GPU-flagged index must fall back to usable CPU search"
+    probe_identity = uids[0].rsplit("-", 1)[0]
+    assert any(h[0].rsplit("-", 1)[0] == probe_identity for h in hits)
+
+
+def test_faiss_gpu_backend_real_cuda_search() -> None:
+    """Real GPU validation — requires faiss-gpu + a CUDA device. On hosts
+    without one the whole test is skipped (CI stays green)."""
+    try:
+        import faiss as faiss_mod  # noqa: F401
+        _have_gpu = hasattr(faiss_mod, "StandardGpuResources")
+    except ImportError:
+        _have_gpu = False
+    if not _have_gpu:
+        pytest.skip("faiss-gpu wheel not installed")
+    cfg = IndexConfig(backend="faiss", nlist=64, nprobe=16, pq_segments=8,
+                      pq_bits=8, use_gpu=True)
+    cfg.validate()
+    backend = build_backend(cfg)
+    if backend.gpu != "cuda":
+        pytest.skip("no CUDA device on this host")
+    vecs, uids = clustered_gallery(n=4000)
+    backend.add(uids, vecs)
+    hits = backend.search(vecs[0], top_k=5)
+    assert hits and abs(hits[0][1]) > 0.9
+
+
 def test_pqlite_byte_budget_matches_whitepaper() -> None:
     """§4.1: 512 FP32 floats -> 64 bytes after PQ (96.8% memory reduction)."""
     raw_bytes = DIM * 4

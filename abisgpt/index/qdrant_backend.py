@@ -146,6 +146,26 @@ class QdrantIndex(VectorIndex):
         )
         return before - self._count_matching(wanted)
 
+    def items(self) -> Iterable[tuple[str, np.ndarray]]:
+        """Scroll all stored (identity_id, vector) pairs — full snapshot for
+        gallery restore after a service restart (deterministic point UUIDs
+        guarantee one point per identity)."""
+        next_token = None
+        while True:
+            page, next_token = self._client.scroll(
+                collection_name=self.collection,
+                limit=256,
+                offset=next_token,
+                with_payload=True,
+                with_vectors=True,
+            )
+            for hit in page:
+                ident = (hit.payload or {}).get("identity_id")
+                if ident is not None and hit.vector is not None:
+                    yield str(ident), np.asarray(hit.vector, np.float32)
+            if not next_token:
+                return
+
     def __len__(self) -> int:
         info = self._client.get_collection(self.collection)
         return int(info.points_count or 0)

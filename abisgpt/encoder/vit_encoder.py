@@ -13,6 +13,8 @@ Produces 512-D L2-normalized embeddings for face samples
 from __future__ import annotations
 
 import hashlib
+import os
+from pathlib import Path
 
 import numpy as np
 
@@ -30,16 +32,22 @@ class ViTBiometricEncoder:
           pixels to a stable pseudo-random unit vector. Used as a scaffold.
         * ``"torch"``   — real transformer backbone via timm (DINOv2/CLIP
           ViT). Loads lazily and only when weights are available.
+        * ``"onnx"``    — the trained ToyBiometricEncoder exported to ONNX
+          (artifacts/encoder/face_encoder.onnx, ~500 KB) running on
+          onnxruntime CPU. Real biometric matching without torch, for the
+          reference API container. Canonical input 64×64×3 float [0,1];
+          other sizes are resized.
         * ``"adaface"`` — AdaFace/ArcFace classification head (production
           target). Download weights to `~/.cache/abisgpt/` first.
     """
 
     def __init__(self, strategy: str = "hash", dim: int = EMBEDDING_DIM, seed: int = 0):
-        if strategy not in {"hash", "torch", "adaface"}:
+        if strategy not in {"hash", "torch", "adaface", "onnx"}:
             raise ValueError(f"Unknown encoder strategy: {strategy!r}")
         self.strategy = strategy
         self.dim = dim
         self.seed = seed
+        self._onnx_model_path: str | None = None
 
     # ------------------------------------------------------------------ #
     # Front-end
@@ -55,6 +63,8 @@ class ViTBiometricEncoder:
         """Encode a batch of frames into L2-normalized 512-D vectors."""
         if self.strategy == "torch":
             return self._encode_torch(images)
+        if self.strategy == "onnx":
+            return self._encode_onnx(images)
         return self._encode_hash(images)
 
     def encode_one(self, image: np.ndarray) -> np.ndarray:
@@ -62,6 +72,45 @@ class ViTBiometricEncoder:
 
     def __call__(self, image: np.ndarray) -> np.ndarray:
         return self.encode_one(image)
+
+    # ------------------------------------------------------------------ #
+    # Strategy: trained toy-CNN via ONNXRuntime (real matching, no torch)
+    # ------------------------------------------------------------------ #
+    def _encode_onnx(self, images: list[np.ndarray]) -> np.ndarray:
+        try:
+            import onnxruntime as ort
+        except ImportError as exc:  # pragma: no cover
+            raise ImportError(
+                "Install `onnxruntime` (+opencv) for encoder strategy"
+                " 'onnx'.") from exc
+        if self._onnx_model_path is None:
+            path = Path(os.environ.get(
+                "ABISGPT_ENCODER_ONNX", "artifacts/encoder/face_encoder.onnx"))
+            if not path.exists():
+                raise FileNotFoundError(
+                    f"ONNX encoder not found: {path} — export it with"
+                    " scripts/export_encoder_onnx.py")
+            self._onnx_model_path = str(path)
+        sess = ort.InferenceSession(
+            self._onnx_model_path, providers=["CPUExecutionProvider"])
+        batch = np.stack([self._prepare_onnx(img) for img in images], axis=0)
+        out = sess.run(["embeddings"], {"images": batch})[0]
+        return out / np.maximum(np.linalg.norm(out, axis=1, keepdims=True), 1e-9)
+
+    @staticmethod
+    def _prepare_onnx(image) -> np.ndarray:
+        """Demux uint8 (0..255) or float (0..1) HxWx3 to (3,64,64) float."""
+        import cv2
+
+        a = np.asarray(image)
+        if a.dtype == np.uint8:
+            a = a.astype(np.float32) / 255.0
+        else:
+            a = np.clip(np.asarray(a, np.float32), 0.0, 1.0)
+        if a.ndim == 2:
+            a = np.stack([a] * 3, axis=-1)
+        a = cv2.resize(a, (64, 64), interpolation=cv2.INTER_AREA)
+        return a.transpose(2, 0, 1).astype(np.float32)
 
     # ------------------------------------------------------------------ #
     # Strategy: deterministic hash (tests / synthetic baselines)

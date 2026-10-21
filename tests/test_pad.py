@@ -83,3 +83,30 @@ def test_pad_fusion_scores_live_and_spoof_frames() -> None:
     dead = engine.evaluate(dead_frames)
     assert not dead.is_live
 
+
+def test_pad_single_frame_passes_without_faking_evidence() -> None:
+    """A truly single-frame still defeats BOTH temporal tiers (rPPG needs a
+    sequence, flash needs >=2 frames). Liveness must be UNPROVEN — the gate
+    passes (biometric matching decides), fused_score is honestly None, and
+    the reason strings say so. Never assert 'spoof' from absent evidence."""
+    from abisgpt.config import PadConfig
+    from abisgpt.pad import PassivePadEngine
+
+    engine = PassivePadEngine(PadConfig(fps=int(FPS)))
+    one = np.full((32, 32, 3), 120, dtype=np.uint8)
+    verdict = engine.evaluate([one])
+    assert verdict.is_live is True
+    assert verdict.fused_score is None
+    assert verdict.tier_scores == {}
+    assert any("still mode" in r for r in verdict.reasons)
+    assert any("unproven" in r for r in verdict.reasons)
+
+    # multi-frame replica stills keep the measurable flash tier -> real
+    # fused score with the honest still-mode reason.
+    frames = [one] * 16
+    v2 = engine.evaluate(frames)
+    assert v2.is_live is True
+    assert v2.fused_score is not None
+    assert "flash" in v2.tier_scores
+    assert any("still mode" in r for r in v2.reasons)
+
