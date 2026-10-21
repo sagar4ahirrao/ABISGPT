@@ -257,3 +257,139 @@ probe frames, 150 epochs with shift+rotation augmentation, ArcFace s=16/m=0.10):
   documented limitation; the repo's fingerprint path stays at its
   verified pipeline score rather than a false fine-tune claim.
 
+## S.8 All-data liveness battery + PAD/matcher joint parity (2026-10-21 session)
+
+### S.8.1 VLM heuristic tier re-engineered: scale + resolution invariant
+
+**Defects found** (`abisgpt/pad/vlm.py`, `HeuristicVlmPad`):
+
+1. **Scale bug** — float 0..1 inputs returned liveness 1.0 always (Laplacian
+   of ≤1-valued noise never exceeded |Δ|>4), uint8 inputs returned ≈0 always.
+   One capture, two opposite verdicts depending on frame convention.
+2. **Resolution bug** after naive thresholding — real faces probed at
+   64/128 px scored *above* attack patterns (peak-density of the Laplacian
+   grows with resolution): 64² reals ≈0.99 > 64² moiré 0.83. Ordering
+   inverts with resolution; a fixed mid-band can't cover both.
+
+**Fix** — the tier now normalizes twice, honestly:
+
+- canonical 0..255 scale (×255 only for true 0..1 frames: non-negative,
+  peak ≤1.5 — out-of-range synthetic captures keep native scale);
+- canonical **size**: resample to the console's 32×32 (`INTER_AREA`) before
+  the Laplacian, exactly what the console sees — verdicts now match for the
+  same capture at 32/64/128 px input.
+
+Recalibrated `attack_energy` band on measured data at 32²/0..255
+(`LO=0.975, HI=0.995`, constructor-tunable):
+
+| captures | attack-energy | verdict |
+|---|---|---|
+| olivetti/casia real faces | 0.900–0.960 | live |
+| SOCOFing fingerprints | 0.813–0.958 | live |
+| UniDataPro iris | 0.952–0.977 | live |
+| synthetic screen moiré (3.9 px period) | 0.995 | spoof |
+| white noise | 0.998 | spoof |
+
+### S.8.2 Single-frame stills: still-mode + honest unproven pass
+
+**Defect found** (`abisgpt/pad/fusion.py`): every 1-frame verify probe (all
+`npz` datasets are still captures) hit rPPG on a trivially non-pulsatile
+sequence → **FNMR 1.0, 100% of genuine verifies blocked** by the PAD gate in
+the joint battery, with the flash tier likewise impossible (needs ≥2 frames)
+and zero measurable tiers fused to 0.0.
+
+**Fix** — two-part, matching the §2.2/§2.3 contract:
+
+- `still_mode = replicated-still OR len(frames) < 2` — temporal tiers
+  (rPPG) are excluded, flash+VLM renormalize;
+- **no measurable tier at all** (true single-frame): `fused_score=None`,
+  `is_live=True`, explicit reason *"liveness unproven (not asserted
+  spoof); biometric matching decides"* — absent evidence never asserts
+  spoof, and the matcher still gates identity.
+
+### S.8.3 Joint matcher × PAD parity — all 4 datasets, gate OFF→ON
+
+`scripts/bench_liveness_all.py` Part 2: same trained engine, gate off
+(`pad_0`) then on (`pad_1`):
+
+| modality | FMR | FNMR | acc | blocked genuine | still-reason coverage |
+|---|---|---|---|---|---|
+| face_casia_indomain | 0.0 | 0.117 | 0.922 | 0 | 1.0 |
+| face_olivetti | 0.0 | 0.0125 | 0.992 | 0 | 1.0 |
+| fingerprint_sokocoventry | 0.51 | 0.475 | 0.513 | 0 | 1.0 |
+| iris_unidatapro (directional) | 1.0 | 0.0 | 0.5 | 0 | 1.0 |
+
+`pad_1 == pad_0` on **every** metric — the gate is now provably zero-cost
+on honest stills, by construction. Part 1 sweep (8× replicas over all
+stills): live_rate 1.0 on olivetti/fp/iris (fused ≈0.918–0.925); legacy
+(δ-still A/B: live_rate 0.0 everywhere) reproduced.
+
+### S.8.4 Honest positives + documented ceilings
+
+- **CASIA still AUC stays ≈0.50 at the toy tiers** (0.4977–0.4986 both
+  settings): print/replay attacks and real captures are not separable by
+  this heuristic proxy at 32² — production liveness needs the CLIP+frame
+  tiers; recorded so nobody reads the 1.0 live-rate as attack detection.
+- **Cross-domain face (Olivetti-trained ONNX on CASIA): FMR 0.83** —
+  style dominance, directional EER note preserved in
+  `artifacts/verify_modalities.json`.
+- Fingerprint/iris remain honest negatives at toy-CNN level (S.7.2).
+
+### S.8.5 Additional defects found & fixed this session
+
+1. **A/B monkeypatch restore crash** (`bench_pad.py`,
+   `bench_liveness_all.py`): class-attribute access strips the
+   `staticmethod` descriptor → restore now re-wraps `staticmethod(orig)`.
+2. **Restart gallery loss**: Qdrant kept vectors after a container restart
+   but the in-memory gallery rebuilt empty — `/identities` listed nothing
+   while `/health` counted stale (unreachable, unerased) points. All
+   backends gained a precise `items()` snapshot hook
+   (`abisgpt/index/base.py`); the pipeline restores the exact Tier-2
+   gallery at construction (`tests/test_restore.py` regresses a
+   restart-verify round-trip). Faiss deliberately does NOT restore from PQ
+   codes (approximate templates would silently degrade Tier-2).
+3. **Out-of-range synthetic frames** (`api_smoke.py`, service
+   `_clean_probe`): ±2.5-level pulse stacked on a 0..1 base produced
+   −1.7..2.4 "images"; both generators now use the `demo_synthetic.py`
+   0..255 convention, and both VLM scorers guard against out-of-range
+   frames.
+4. **`api_smoke` assumed an empty store** — post-condition is now
+   before/after equality (runs on clean *and* dirty registries).
+5. **`PrecisionVerifier` shape/deprecation bug**: (1,dim)×(dim,1) dot
+   raised a NumPy deprecation and a shape mismatch returned garbage —
+   flattened inputs + explicit shape guard.
+6. **Observed reject reason strings** for 1:1 verify (`pad_reasons`).
+
+### S.8.6 Faiss GPU vector search (feature, §4 knobs preserved)
+
+`IndexConfig.use_gpu` (+ env `ABISGPT_INDEX_GPU=1`, backend alias
+`faiss-gpu`, pyproject `[gpu]` extra): the trained IVF-HNSW-PQ index is
+moved wholesale to CUDA via `index_cpu_to_gpu(StandardGpuResources, ...)`.
+No CUDA device / CPU-only wheel → constructor records `gpu="unavailable"`
+and falls back to identical CPU execution.
+`tests/test_encoder_index.py`: `test_faiss_gpu_flag_cpu_fallback_on_no_cuda`
+(runs everywhere), `test_faiss_gpu_backend_real_cuda_search`
+(skips without faiss-gpu hardware). PQ-code restore stays blocked by
+design (`items()` unimplemented).
+
+### S.8.7 Android on-device mode (delivered, not device-verified)
+
+`scripts/android/termux_bootstrap.sh` + `docs/ANDROID.md`: Termux +
+proot-distro Ubuntu, torch-free `requirements-light.txt` venv, brute
+vector backend, ONNX encoder trained+exported on device (or shipped), API
+served at `localhost:8000`. Console/1:1/1:N/PAD paths identical to the
+verified container; the bootstrap script itself is **not verified on a
+real phone** (no Android hardware in this environment) — documented in
+the matrix in `docs/ANDROID.md`.
+
+### S.8.8 Verdicts at end of session
+
+- pytest: **45 passed / 3 skipped** (skips: faiss-gpu/CUDA test on CPU host
+  + two opt-in integration runs)
+- ruff: **clean**
+- Live container gates rebuilt & re-run after every fix:
+  `diag_live_onnx` (1:1 0.632 same / 0.204 different / 1:N top 0.753),
+  `api_smoke` **PASS**, `ui_smoke` **12/12 PASS**, `e2e_ui` **12/12 PASS**
+- Run-of-record artifacts: `artifacts/liveness_all.json`,
+  `artifacts/pad_bench_fusion.json`, `artifacts/pad_bench_fusion_noStillfix.json`
+
